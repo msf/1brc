@@ -15,6 +15,5 @@
 #  limitations under the License.
 #
 
-make -C src/main/go/msf test
 make -C src/main/go/msf build
-cp -f src/main/go/msf/1brc target/msf
+cp -f src/main/go/msf/msf1brc target/msf

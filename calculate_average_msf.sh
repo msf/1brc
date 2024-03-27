@@ -17,4 +17,4 @@
 
 INPUT=${1:-"measurements.txt"}
 
-target/msf/1brc "$INPUT"
+GOGC=500 GOMEMLIMIT=20GiB target/msf "$INPUT"
