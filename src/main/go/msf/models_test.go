@@ -16,23 +16,20 @@ func TestAllMeasures_AddMeasure(t *testing.T) {
 	allMeasures := NewAllMeasures()
 
 	// Add measures to the AllMeasures instance
-	allMeasures.Add(measure{"Location1", 10})
-	allMeasures.Add(measure{"Location2", 20})
+	allMeasures.Add(measure{"Location1", 10 * FLOAT2INT})
+	allMeasures.Add(measure{"Location2", 20 * FLOAT2INT})
 
 	// Verify that the measures were added correctly
 	require.Equal(t, 2, len(allMeasures.Locations))
 
-	require.EqualValues(t, 10, allMeasures.Locations["Location1"].Min)
-	require.EqualValues(t, 10, allMeasures.Locations["Location1"].Max)
-	require.EqualValues(t, 1, allMeasures.Locations["Location1"].Count)
-	require.EqualValues(t, 10, allMeasures.Locations["Location1"].Sum)
-	require.EqualValues(t, 10.0, allMeasures.Locations["Location1"].Avg())
+	buf := bytes.Buffer{}
+	allMeasures.Locations["Location1"].WriteTo(&buf)
+	require.EqualValues(t, "10.0/10.0/10.0", buf.String())
 
-	allMeasures.Add(measure{"Location1", 20})
-	require.EqualValues(t, 20, allMeasures.Locations["Location1"].Max)
-	require.EqualValues(t, 2, allMeasures.Locations["Location1"].Count)
-	require.EqualValues(t, 30, allMeasures.Locations["Location1"].Sum)
-	require.EqualValues(t, 15.0, allMeasures.Locations["Location1"].Avg())
+	allMeasures.Add(measure{"Location1", 20 * FLOAT2INT})
+	buf.Reset()
+	allMeasures.Locations["Location1"].WriteTo(&buf)
+	require.EqualValues(t, "10.0/15.0/20.0", buf.String())
 }
 
 func BenchmarkFullRun(b *testing.B) {

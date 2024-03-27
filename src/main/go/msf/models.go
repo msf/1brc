@@ -60,11 +60,7 @@ func (a *AllMeasures) Print(dst io.Writer) {
 		}
 		w.WriteString(location)
 		w.WriteByte(buf[1])
-		w.WriteString(strconv.FormatFloat(float64(aggregate.Min), 'f', 1, 32))
-		w.WriteByte(buf[2])
-		w.WriteString(strconv.FormatFloat(float64(aggregate.Avg()), 'f', 1, 32))
-		w.WriteByte(buf[2])
-		w.WriteString(strconv.FormatFloat(float64(aggregate.Max), 'f', 1, 32))
+		aggregate.WriteTo(w)
 	}
 	w.WriteByte(buf[3])
 	w.WriteByte(buf[6])
@@ -73,14 +69,14 @@ func (a *AllMeasures) Print(dst io.Writer) {
 
 type measure struct {
 	Location string
-	Temp     int32
+	Temp     int64
 }
 
 type aggregate struct {
-	Max   int32
-	Min   int32
-	Sum   int32
-	Count uint32
+	Max   int64
+	Min   int64
+	Sum   int64
+	Count int64
 }
 
 func (a *aggregate) Add(m measure) {
@@ -94,13 +90,29 @@ func (a *aggregate) Add(m measure) {
 	a.Count++
 }
 
+const FLOAT2INT = 10
+
+type Writer interface {
+	io.StringWriter
+	io.ByteWriter
+}
+
+func (a *aggregate) WriteTo(w Writer) {
+	w.WriteString(strconv.FormatFloat(float64(a.Min)/FLOAT2INT, 'f', 1, 64))
+	w.WriteByte('/')
+	w.WriteString(strconv.FormatFloat(a.Avg(), 'f', 1, 64))
+	w.WriteByte('/')
+	w.WriteString(strconv.FormatFloat(float64(a.Max)/FLOAT2INT, 'f', 1, 64))
+}
+
 // rounding floats to 1 decimal place with 0.05 rounding up to 0.1
 func round(x float64) float64 {
 	return math.Floor((x+0.05)*10) / 10
 }
 
-func (a *aggregate) Avg() float32 {
-	return float32(round(float64(a.Sum) / float64(a.Count)))
+func (a *aggregate) Avg() float64 {
+	t := float64(a.Sum) / float64(a.Count*FLOAT2INT)
+	return round(t)
 }
 
 func (m *measure) Parse(s string) {
@@ -114,5 +126,5 @@ func (m *measure) Parse(s string) {
 	}
 
 	m.Location = loc
-	m.Temp = int32(val * 10)
+	m.Temp = int64(round(val) * FLOAT2INT)
 }
