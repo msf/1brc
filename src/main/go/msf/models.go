@@ -73,13 +73,13 @@ func (a *AllMeasures) Print(dst io.Writer) {
 
 type measure struct {
 	Location string
-	Temp     float32
+	Temp     int32
 }
 
 type aggregate struct {
-	Max   float32
-	Min   float32
-	Sum   float32
+	Max   int32
+	Min   int32
+	Sum   int32
 	Count uint32
 }
 
@@ -114,5 +114,5 @@ func (m *measure) Parse(s string) {
 	}
 
 	m.Location = loc
-	m.Temp = float32(val)
+	m.Temp = int32(val * 10)
 }
