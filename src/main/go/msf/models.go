@@ -69,14 +69,14 @@ func (a *AllMeasures) Print(dst io.Writer) {
 
 type measure struct {
 	Location string
-	Temp     int64
+	Temp     int32
 }
 
 type aggregate struct {
-	Max   int64
-	Min   int64
-	Sum   int64
-	Count int64
+	Max   int32
+	Min   int32
+	Sum   int32
+	Count int32
 }
 
 func (a *aggregate) Add(m measure) {
@@ -126,5 +126,5 @@ func (m *measure) Parse(s string) {
 	}
 
 	m.Location = loc
-	m.Temp = int64(round(val) * FLOAT2INT)
+	m.Temp = int32(round(val) * FLOAT2INT)
 }

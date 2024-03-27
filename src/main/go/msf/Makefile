@@ -1,9 +1,9 @@
 all: lint test build
 
-test: lint bench
+test: lint
 	go test -timeout=60s -cover -race ./...
 
-bench:
+bench: test
 	go test -bench=. -benchmem -count=3 ./...
 
 build:
