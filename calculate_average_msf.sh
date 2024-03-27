@@ -15,5 +15,6 @@
 #  limitations under the License.
 #
 
-JAVA_OPTS=""
-java $JAVA_OPTS --class-path target/average-1.0.0-SNAPSHOT.jar dev.morling.onebrc.CalculateAverage_msf
+INPUT=${1:-"measurements.txt"}
+
+target/msf/1brc "$INPUT"

@@ -15,6 +15,6 @@
 #  limitations under the License.
 #
 
-# Uncomment below to use sdk
-source "$HOME/.sdkman/bin/sdkman-init.sh"
-sdk use java 21.0.1-graal 1>&2
+make -C src/main/go/msf test
+make -C src/main/go/msf build
+cp -f src/main/go/msf/1brc target/msf
