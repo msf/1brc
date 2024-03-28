@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 #
 #  Copyright 2023 The original authors
 #
@@ -15,6 +15,6 @@
 #  limitations under the License.
 #
 
-# Uncomment below to use sdk
-source "$HOME/.sdkman/bin/sdkman-init.sh"
-sdk use java 21.0.1-graal 1>&2
+INPUT=${1:-"measurements.txt"}
+
+GOGC=500 GOMEMLIMIT=20GiB target/msf "$INPUT"
