@@ -11,38 +11,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestAllMeasures_AddMeasure(t *testing.T) {
-	// Create a new instance of AllMeasures
-	allMeasures := NewAggregator()
+func TestParallel_basic(t *testing.T) {
+	// Create a new instance of ParallelAggregator
+	aggregator := NewParallelAggregator("../../../test/resources/samples/measurements-1.txt", 8)
 
-	// Add measures to the AllMeasures instance
-	allMeasures.Add(measure{"Location1", 10 * FLOAT2INT})
-	allMeasures.Add(measure{"Location2", 20 * FLOAT2INT})
+	// Run the aggregator
+	aggregator.Run()
 
-	// Verify that the measures were added correctly
-	require.Equal(t, 2, len(allMeasures.Locations))
-	require.EqualValues(t, "10.0/10.0/10.0", allMeasures.Locations["Location1"].String())
-
-	allMeasures.Add(measure{"Location1", 20 * FLOAT2INT})
-	require.EqualValues(t, "10.0/15.0/20.0", allMeasures.Locations["Location1"].String())
+	// Verify the results
+	require.Equal(t, 1, len(aggregator.finalResult.Locations))
+	require.Equal(t, "19.8/19.8/19.8", aggregator.finalResult.Locations["Kunming"].String())
 }
 
-func BenchmarkFullRun(b *testing.B) {
-	const inputFilePath = "measurements-bench.txt"
-	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0666)
-	require.NoError(b, err)
-	for i := 0; i < b.N; i++ {
-		input, err := os.Open(inputFilePath)
-		require.NoError(b, err)
-
-		allMeasures := NewAggregator().Run(inputFilePath, 0, 0)
-		allMeasures.Print(devNull)
-
-		input.Close()
-	}
-}
-
-func TestAllMeasures_Print(t *testing.T) {
+func TestParallel_Samples(t *testing.T) {
 	// Create a new instance of AllMeasures
 
 	// Define the directory where the sample files are located
@@ -64,14 +45,10 @@ func TestAllMeasures_Print(t *testing.T) {
 			continue
 		}
 		ok := t.Run(file.Name(), func(t *testing.T) {
-			// Read the input file
 			inputFilePath := filepath.Join(samplesDir, file.Name())
-
-			allMeasures := NewAggregator().Run(inputFilePath, 0, 0)
-
-			// Call the Print() method
 			var buf bytes.Buffer
-			allMeasures.Print(&buf)
+
+			ProcessFile(inputFilePath, &buf, 4)
 
 			// Define the expected output file path
 			baseName := strings.TrimSuffix(file.Name(), filepath.Ext(file.Name()))
@@ -83,5 +60,14 @@ func TestAllMeasures_Print(t *testing.T) {
 			require.EqualValues(t, string(expectedOutput), buf.String())
 		})
 		require.True(t, ok, "failed on: ", file.Name())
+	}
+}
+
+func BenchmarkParallelFullRun(b *testing.B) {
+	const inputFilePath = "measurements-bench.txt"
+	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0666)
+	require.NoError(b, err)
+	for i := 0; i < b.N; i++ {
+		ProcessFile(inputFilePath, devNull, 0)
 	}
 }

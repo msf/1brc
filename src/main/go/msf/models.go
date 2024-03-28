@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"io"
 	"log"
 	"math"
@@ -15,22 +16,42 @@ type AllMeasures struct {
 	Locations map[string]*aggregate
 }
 
-func NewAllMeasures() *AllMeasures {
+func NewAggregator() *AllMeasures {
 	return &AllMeasures{Locations: make(map[string]*aggregate)}
 }
 
-func (a *AllMeasures) ReadReadings(file *os.File) {
+func (a *AllMeasures) Run(fileName string, start, end int64) *AllMeasures {
+	file, err := os.Open(fileName)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+	curr, err := file.Seek(start, 0)
+	if err != nil {
+		log.Fatal(err)
+	}
 	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
+	if end == 0 {
+		end = math.MaxInt64
+	}
+	first := true
+	for scanner.Scan() && curr <= end {
+		if first && start != 0 {
+			first = false
+			// skip the first line if we're starting in non zero offset, incomplete
+			continue
+		}
 		var m measure
 		s := scanner.Text()
 		m.Parse(s)
+		curr += int64(len(s)) + 1
 		a.Add(m)
 	}
 
 	if err := scanner.Err(); err != nil {
 		log.Fatal(err)
 	}
+	return a
 }
 
 func (a *AllMeasures) Add(m measure) {
@@ -38,6 +59,16 @@ func (a *AllMeasures) Add(m measure) {
 		a.Locations[m.Location] = &aggregate{Max: m.Temp, Min: m.Temp, Sum: m.Temp, Count: 1}
 	} else {
 		rec.Add(m)
+	}
+}
+
+func (a *AllMeasures) Merge(b *AllMeasures) {
+	for location, aggregate := range b.Locations {
+		if rec, ok := a.Locations[location]; !ok {
+			a.Locations[location] = aggregate
+		} else {
+			rec.Merge(aggregate)
+		}
 	}
 }
 
@@ -50,20 +81,19 @@ func (a *AllMeasures) Print(dst io.Writer) {
 
 	w := bufio.NewWriter(dst)
 
-	buf := []byte{'{', '=', '/', '}', ',', ' ', '\n'}
-	w.WriteByte(buf[0])
+	w.WriteByte('{')
 	for i, location := range sortedLocations {
 		aggregate := a.Locations[location]
 		if i > 0 {
-			w.WriteByte(buf[4])
-			w.WriteByte(buf[5])
+			w.WriteByte(',')
+			w.WriteByte(' ')
 		}
 		w.WriteString(location)
-		w.WriteByte(buf[1])
+		w.WriteByte('=')
 		aggregate.WriteTo(w)
 	}
-	w.WriteByte(buf[3])
-	w.WriteByte(buf[6])
+	w.WriteByte('}')
+	w.WriteByte('\n')
 	w.Flush()
 }
 
@@ -90,6 +120,17 @@ func (a *aggregate) Add(m measure) {
 	a.Count++
 }
 
+func (a *aggregate) Merge(b *aggregate) {
+	if b.Max > a.Max {
+		a.Max = b.Max
+	}
+	if b.Min < a.Min {
+		a.Min = b.Min
+	}
+	a.Sum += b.Sum
+	a.Count += b.Count
+}
+
 const FLOAT2INT = 10
 
 type Writer interface {
@@ -103,6 +144,12 @@ func (a *aggregate) WriteTo(w Writer) {
 	w.WriteString(strconv.FormatFloat(a.Avg(), 'f', 1, 64))
 	w.WriteByte('/')
 	w.WriteString(strconv.FormatFloat(float64(a.Max)/FLOAT2INT, 'f', 1, 64))
+}
+
+func (a *aggregate) String() string {
+	buf := bytes.Buffer{}
+	a.WriteTo(&buf)
+	return buf.String()
 }
 
 // rounding floats to 1 decimal place with 0.05 rounding up to 0.1
