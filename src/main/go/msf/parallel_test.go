@@ -13,14 +13,14 @@ import (
 
 func TestParallel_basic(t *testing.T) {
 	// Create a new instance of ParallelAggregator
-	aggregator := NewParallelAggregator("../../../test/resources/samples/measurements-1.txt", 8)
+	aggregator := NewParallelAggregator("../../../test/resources/samples/measurements-3.txt", 8)
 
 	// Run the aggregator
 	aggregator.Run()
 
 	// Verify the results
-	require.Equal(t, 1, len(aggregator.finalResult.Locations))
-	require.Equal(t, "19.8/19.8/19.8", aggregator.finalResult.Locations["Kunming"].String())
+	require.Equal(t, 2, len(aggregator.finalResult.Locations))
+	require.Equal(t, "-15.0/1.3/20.0", aggregator.finalResult.Locations["Bosaso"].String())
 }
 
 func TestParallel_Samples(t *testing.T) {
@@ -48,7 +48,7 @@ func TestParallel_Samples(t *testing.T) {
 			inputFilePath := filepath.Join(samplesDir, file.Name())
 			var buf bytes.Buffer
 
-			ProcessFile(inputFilePath, &buf, 4)
+			ProcessFile(inputFilePath, &buf, 32 /*lots of chunks */)
 
 			// Define the expected output file path
 			baseName := strings.TrimSuffix(file.Name(), filepath.Ext(file.Name()))

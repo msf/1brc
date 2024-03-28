@@ -36,6 +36,7 @@ func (a *AllMeasures) Run(fileName string, start, end int64) *AllMeasures {
 	}
 	first := true
 	for scanner.Scan() && curr <= end {
+		curr += int64(len(scanner.Bytes())) + 1
 		if first && start != 0 {
 			first = false
 			// skip the first line if we're starting in non zero offset, incomplete
@@ -44,7 +45,6 @@ func (a *AllMeasures) Run(fileName string, start, end int64) *AllMeasures {
 		var m measure
 		s := scanner.Text()
 		m.Parse(s)
-		curr += int64(len(s)) + 1
 		a.Add(m)
 	}
 
