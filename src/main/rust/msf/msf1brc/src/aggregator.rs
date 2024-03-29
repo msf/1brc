@@ -16,7 +16,7 @@ struct Aggregate {
 
 impl Aggregate {
     fn to_string(&self) -> String {
-        let avg = self.sum / self.count as f64;
+        let avg = round(self.sum) / self.count as f64;
         String::from(format!("{:.1}/{:.1}/{:.1}", self.min, round(avg), self.max))
     }
 
@@ -74,7 +74,7 @@ struct Measurement {
 
 // rounding floats to 1 decimal place with 0.05 rounding up to 0.1
 fn round(x: f64) -> f64 {
-    (x + 0.05).floor() / 10.0
+    ((x + 0.05) * 10.0).floor() / 10.0
 }
 
 pub fn process_file(filename: &str, output: &mut dyn Write) -> io::Result<()> {
@@ -89,7 +89,7 @@ pub fn process_file(filename: &str, output: &mut dyn Write) -> io::Result<()> {
         let value: f64 = parts[1].parse().unwrap();
         let measurement = Measurement {
             location: parts[0].to_string(),
-            temperature: value,
+            temperature: round(value),
         };
         aggregator.add(&measurement);
     }

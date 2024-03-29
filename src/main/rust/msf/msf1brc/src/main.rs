@@ -10,7 +10,7 @@ fn main() {
         return;
     }
 
-    if let Err(err) = aggregator::process_file(&args[0], &mut io::stdout()) {
+    if let Err(err) = aggregator::process_file(&args[1], &mut io::stdout()) {
         eprintln!("Error: {}", err);
     }
 }
