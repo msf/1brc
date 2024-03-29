@@ -64,7 +64,8 @@ func TestParallel_Samples(t *testing.T) {
 }
 
 func BenchmarkParallelFullRun(b *testing.B) {
-	const inputFilePath = "measurements-bench.txt"
+	const samplesDir = "../../../test/resources/samples/"
+	const inputFilePath = samplesDir + "measurements.bench"
 	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0666)
 	require.NoError(b, err)
 	for i := 0; i < b.N; i++ {

@@ -2,30 +2,29 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufRead, Write};
 
+pub fn process_file(filename: &str, output: &mut dyn Write) -> io::Result<()> {
+    let file = File::open(filename)?;
+    let reader = io::BufReader::new(file);
+
+    let mut aggregator = MeasurementAggregator::new();
+
+    for line in reader.lines() {
+        let line = line?;
+        let parts: Vec<&str> = line.split(';').collect();
+        let value: f64 = parts[1].parse().expect("Invalid temperature value");
+        aggregator.add(Measurement {
+            location: parts[0].to_string(),
+            temperature: round(value),
+        });
+    }
+
+    aggregator.write(output)?;
+
+    Ok(())
+}
+
 struct MeasurementAggregator {
     data: HashMap<String, Aggregate>,
-}
-
-#[derive(PartialEq, Debug)]
-struct Aggregate {
-    min: f64,
-    max: f64,
-    sum: f64,
-    count: usize,
-}
-
-impl Aggregate {
-    fn to_string(&self) -> String {
-        let avg = round(self.sum) / self.count as f64;
-        String::from(format!("{:.1}/{:.1}/{:.1}", self.min, round(avg), self.max))
-    }
-
-    fn add(&mut self, measurement: &Measurement) {
-        self.min = self.min.min(measurement.temperature);
-        self.max = self.max.max(measurement.temperature);
-        self.sum += measurement.temperature;
-        self.count += 1;
-    }
 }
 
 impl MeasurementAggregator {
@@ -35,11 +34,11 @@ impl MeasurementAggregator {
         }
     }
 
-    fn add(&mut self, measurement: &Measurement) {
+    fn add(&mut self, measurement: Measurement) {
         self.data
-            .entry(measurement.location.clone())
+            .entry(measurement.location)
             .and_modify(|agg| {
-                agg.add(measurement);
+                agg.add(measurement.temperature);
             })
             .or_insert(Aggregate {
                 min: measurement.temperature,
@@ -67,9 +66,32 @@ impl MeasurementAggregator {
     }
 }
 
+#[derive(PartialEq, Debug)]
+struct Aggregate {
+    min: Temperature,
+    max: Temperature,
+    sum: Temperature,
+    count: usize,
+}
+
+impl Aggregate {
+    fn to_string(&self) -> String {
+        let avg = round(self.sum) / self.count as f64;
+        String::from(format!("{:.1}/{:.1}/{:.1}", self.min, round(avg), self.max))
+    }
+
+    fn add(&mut self, measurement: Temperature) {
+        self.min = self.min.min(measurement);
+        self.max = self.max.max(measurement);
+        self.sum += measurement;
+        self.count += 1;
+    }
+}
+
+type Temperature = f64;
 struct Measurement {
     location: String,
-    temperature: f64,
+    temperature: Temperature,
 }
 
 // rounding floats to 1 decimal place with 0.05 rounding up to 0.1
@@ -77,33 +99,12 @@ fn round(x: f64) -> f64 {
     ((x + 0.05) * 10.0).floor() / 10.0
 }
 
-pub fn process_file(filename: &str, output: &mut dyn Write) -> io::Result<()> {
-    let file = File::open(filename)?;
-    let reader = io::BufReader::new(file);
-
-    let mut aggregator = MeasurementAggregator::new();
-
-    for line in reader.lines() {
-        let line = line?;
-        let parts: Vec<&str> = line.split(';').collect();
-        let value: f64 = parts[1].parse().unwrap();
-        let measurement = Measurement {
-            location: parts[0].to_string(),
-            temperature: round(value),
-        };
-        aggregator.add(&measurement);
-    }
-
-    aggregator.write(output)?;
-
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use std::{fs, io::Read};
 
     use super::*;
+
     #[test]
     fn test_process_file() {
         let test_dir = "../../../../test/resources/samples/";
@@ -146,31 +147,31 @@ mod tests {
             location: "Location1".to_string(),
             temperature: 25.0,
         };
-        aggregator.add(&measurement1);
+        aggregator.add(measurement1);
 
         let measurement2 = Measurement {
             location: "Location2".to_string(),
             temperature: 30.0,
         };
-        aggregator.add(&measurement2);
+        aggregator.add(measurement2);
 
         let measurement3 = Measurement {
             location: "Location1".to_string(),
             temperature: 20.0,
         };
-        aggregator.add(&measurement3);
+        aggregator.add(measurement3);
 
         let measurement4 = Measurement {
             location: "Location2".to_string(),
             temperature: 35.0,
         };
-        aggregator.add(&measurement4);
+        aggregator.add(measurement4);
 
         let measurement5 = Measurement {
             location: "Location3".to_string(),
             temperature: 15.0,
         };
-        aggregator.add(&measurement5);
+        aggregator.add(measurement5);
 
         let mut expected_data = HashMap::new();
         expected_data.insert(
