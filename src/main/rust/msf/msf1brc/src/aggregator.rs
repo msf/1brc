@@ -101,9 +101,9 @@ fn round(x: f64) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, io::Read};
-
     use super::*;
+    use std::{fs, io::Read};
+    use test::Bencher;
 
     #[test]
     fn test_process_file() {
@@ -203,5 +203,14 @@ mod tests {
         );
 
         assert_eq!(aggregator.data, expected_data);
+    }
+
+    #[bench]
+    fn bench_process_file(b: &mut Bencher) {
+        let test_file = "../../../../test/resources/samples/measurements.bench";
+        b.iter(|| {
+            let mut output = Vec::new();
+            process_file(&test_file.to_string(), &mut output).unwrap();
+        });
     }
 }

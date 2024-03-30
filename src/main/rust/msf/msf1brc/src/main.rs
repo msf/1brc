@@ -1,3 +1,6 @@
+#![feature(test)]
+extern crate test; // for benchmarking
+
 mod aggregator;
 
 use std::env;
