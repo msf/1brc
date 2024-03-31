@@ -8,14 +8,9 @@ pub fn process_file(filename: &str, output: &mut dyn Write) -> io::Result<()> {
 
     let mut aggregator = MeasurementAggregator::new();
 
-    for line in reader.lines() {
+    for line in reader.split(b'\n') {
         let line = line?;
-        let parts: Vec<&str> = line.split(';').collect();
-        let value: f64 = parts[1].parse().expect("Invalid temperature value");
-        aggregator.add(Measurement {
-            location: parts[0].to_string(),
-            temperature: round(value),
-        });
+        aggregator.add(line);
     }
 
     aggregator.write(output)?;
@@ -24,7 +19,7 @@ pub fn process_file(filename: &str, output: &mut dyn Write) -> io::Result<()> {
 }
 
 struct MeasurementAggregator {
-    data: HashMap<String, Aggregate>,
+    data: HashMap<[u8], Aggregate>,
 }
 
 impl MeasurementAggregator {
@@ -34,23 +29,31 @@ impl MeasurementAggregator {
         }
     }
 
-    fn add(&mut self, measurement: Measurement) {
+    fn add(&mut self, line: Vec<u8>) {
+        let parts: Vec<&[u8]> = line.split(|x| *x == b';').collect();
+        let value_str = std::str::from_utf8_unchecked(parts[1]).expect("Invalid UTF-8 sequence");
+        let value: f32 = value_str.parse().expect("Invalid float value");
+        let value: f64 = parts[1]
+            .as_string_lossy()
+            .parse()
+            .expect("Invalid temperature value");
+        let temp = round(value);
         self.data
-            .entry(measurement.location)
+            .entry(parts[0].as_bytes())
             .and_modify(|agg| {
-                agg.add(measurement.temperature);
+                agg.add(temp);
             })
             .or_insert(Aggregate {
-                min: measurement.temperature,
-                max: measurement.temperature,
-                sum: measurement.temperature,
+                min: temp,
+                max: temp,
+                sum: temp,
                 count: 1,
             });
     }
 
     fn write(&self, output: &mut dyn Write) -> io::Result<()> {
         let mut keys: Vec<_> = self.data.keys().collect();
-        keys.sort();
+        keys.sort_unstable();
         write!(output, "{{")?;
         let mut first = true;
         for location in keys {
@@ -58,7 +61,10 @@ impl MeasurementAggregator {
             if !first {
                 write!(output, ", ")?;
             }
-            write!(output, "{}={}", location, stats.to_string())?;
+            io::Write::write(output, location.as_bytes())?;
+            write!(output, location)?;
+            write!(output, "=")?;
+            write!(output, stats.to_string())?;
             first = false;
         }
         write!(output, "}}\n")?;
