@@ -3,6 +3,7 @@ package main
 import (
 	"io"
 	"log"
+	"log/slog"
 	"os"
 	"runtime"
 	"sync"
@@ -44,6 +45,12 @@ func NewParallelAggregator(filename string, chunks int) *ParallelAggregator {
 }
 
 func (pa *ParallelAggregator) Run() {
+	slog.Info("Processing file..",
+		"filename", pa.filename,
+		"chunks", pa.chunks,
+		"chunkSizeMiB", pa.chunkSize/(1024*1024),
+		"fileSizeMiB", pa.fileSize/(1024*1024),
+	)
 	var wg sync.WaitGroup
 	wg.Add(pa.chunks)
 
@@ -58,6 +65,9 @@ func (pa *ParallelAggregator) Run() {
 
 	for res := range pa.results {
 		pa.finalResult.Merge(res)
+		slog.Info("Merged 1 result",
+			"resCount", len(res.Locations),
+		)
 	}
 }
 
