@@ -29,12 +29,8 @@ impl MeasurementAggregator {
         }
     }
 
-    fn add(&mut self, line: String) {
-            let parts: Vec<&str> = line.split(';').collect();
-        let location = parts[0].to_owned();
-        let value: f64 = parts[1].parse().expect("Invalid temperature value");
-        let temp = round(value);
-
+    fn add(&mut self, line: String) {   
+        let (location, temp ) = parse(line.as_str());
         self.data
             .entry(location)
             .and_modify(|agg| {
@@ -78,8 +74,10 @@ struct Aggregate {
 
 impl Aggregate {
     fn to_string(&self) -> String {
-        let avg = round(self.sum) / self.count as f64;
-        String::from(format!("{:.1}/{:.1}/{:.1}", self.min, round(avg), self.max))
+        let t = self.sum as f32 / ((self.count as f32) * FLOAT2INT);
+        let min = self.min as f32 / FLOAT2INT;
+        let max = self.max as f32 / FLOAT2INT;
+        String::from(format!("{:.1}/{:.1}/{:.1}", min, round(t), max))
     }
 
     fn add(&mut self, measurement: Temperature) {
@@ -90,10 +88,20 @@ impl Aggregate {
     }
 }
 
-type Temperature = f64;
+type Temperature = i32;
+const FLOAT2INT: f32 = 10.0;
+
+fn parse(line: &str) -> (String, Temperature) {
+    let parts: Vec<&str> = line.split(';').collect();
+    let location = parts[0].to_owned();
+    let value: f32 = parts[1].parse().expect("Invalid temperature value");
+    let temp = (round(value)* FLOAT2INT) as i32;
+    return (location, temp);
+}
 
 // rounding floats to 1 decimal place with 0.05 rounding up to 0.1
-fn round(x: Temperature) -> Temperature {
+#[allow(dead_code)]
+fn round(x: f32) -> f32 {
     ((x + 0.05) * 10.0).floor() / 10.0
 }
 
@@ -160,27 +168,27 @@ mod tests {
         expected_data.insert(
             "Location1".to_string(),
             Aggregate {
-                min: 20.0,
-                max: 25.0,
-                sum: 45.0,
+                min: 200,
+                max: 250,
+                sum: 450,
                 count: 2,
             },
         );
         expected_data.insert(
             "Location2".to_string(),
             Aggregate {
-                min: 30.0,
-                max: 35.0,
-                sum: 65.0,
+                min: 300,
+                max: 350,
+                sum: 650,
                 count: 2,
             },
         );
         expected_data.insert(
             "Location3".to_string(),
             Aggregate {
-                min: 15.0,
-                max: 15.0,
-                sum: 15.0,
+                min: 150,
+                max: 150,
+                sum: 150,
                 count: 1,
             },
         );
