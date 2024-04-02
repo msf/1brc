@@ -8,7 +8,7 @@ pub fn process_file(filename: &str, output: &mut dyn Write) -> io::Result<()> {
 
     let mut aggregator = MeasurementAggregator::new();
 
-    for line in reader.split(b'\n') {
+    for line in reader.lines() {
         let line = line?;
         aggregator.add(line);
     }
@@ -29,14 +29,14 @@ impl MeasurementAggregator {
         }
     }
 
-    fn add(&mut self, line: Vec<u8>) {
-        let parts: Vec<&[u8]> = line.split(|x| *x == b';').collect();
-        let value_str = std::str::from_utf8(&parts[1]).expect("Invalid UTF-8 sequence");
-        let value: f64 = value_str.parse().expect(format!("Invalid float value: {}", value_str).as_str());
+    fn add(&mut self, line: String) {
+            let parts: Vec<&str> = line.split(';').collect();
+        let location = parts[0].to_owned();
+        let value: f64 = parts[1].parse().expect("Invalid temperature value");
         let temp = round(value);
-        let loc = std::str::from_utf8(parts[0]).expect("Invalid UTF-8 sequence").to_owned();
+
         self.data
-            .entry(loc)
+            .entry(location)
             .and_modify(|agg| {
                 agg.add(temp);
             })
@@ -141,19 +141,19 @@ mod tests {
     fn test_measurement_aggregator() {
         let mut aggregator = MeasurementAggregator::new();
 
-        let line1 = b"Location1;25.0".to_vec();
+        let line1 = "Location1;25.0".to_string();
         aggregator.add(line1);
 
-        let line2 = b"Location2;30.0".to_vec();
+        let line2 = "Location2;30.0".to_string();
         aggregator.add(line2);
 
-        let line3 = b"Location1;20.0".to_vec();
+        let line3 = "Location1;20.0".to_string();
         aggregator.add(line3);
 
-        let line4 = b"Location2;35.0".to_vec();
+        let line4 = "Location2;35.0".to_string();
         aggregator.add(line4);
 
-        let line5 = b"Location3;15.0".to_vec();
+        let line5 = "Location3;15.0".to_string();
         aggregator.add(line5);
 
         let mut expected_data = HashMap::new();
