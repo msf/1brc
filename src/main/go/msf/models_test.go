@@ -28,17 +28,13 @@ func TestAllMeasures_AddMeasure(t *testing.T) {
 }
 
 func BenchmarkFullRun(b *testing.B) {
-	const inputFilePath = "measurements-bench.txt"
+	const samplesDir = "../../../test/resources/samples/"
+	const inputFilePath = samplesDir + "measurements.bench"
 	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0666)
 	require.NoError(b, err)
 	for i := 0; i < b.N; i++ {
-		input, err := os.Open(inputFilePath)
-		require.NoError(b, err)
-
 		allMeasures := NewAggregator().Run(inputFilePath, 0, 0)
 		allMeasures.Print(devNull)
-
-		input.Close()
 	}
 }
 
