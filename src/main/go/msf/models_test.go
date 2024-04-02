@@ -27,7 +27,7 @@ func TestAllMeasures_AddMeasure(t *testing.T) {
 	require.EqualValues(t, "10.0/15.0/20.0", allMeasures.Locations["Location1"].String())
 }
 
-func BenchmarkFullRun(b *testing.B) {
+func BenchmarkProcessFile(b *testing.B) {
 	const samplesDir = "../../../test/resources/samples/"
 	const inputFilePath = samplesDir + "measurements.bench"
 	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0666)

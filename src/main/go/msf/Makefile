@@ -1,10 +1,10 @@
 all: lint test build
 
-test: lint
+test: lint bench
 	go test -timeout=60s -cover -race ./...
 
 bench: 
-	go test -bench=. -benchmem -count=3 ./...
+	go test -bench=. -benchtime=10s -benchmem -count=3 ./...
 
 build:
 	# static build for alpine
