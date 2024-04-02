@@ -70,7 +70,7 @@ mod tests {
     #[test]
     fn test_parallel_basic() {
         // Create a new instance of ParallelAggregator
-        let mut aggregator = ParallelMeasurementAggregator::new(16);
+        let aggregator = ParallelMeasurementAggregator::new(16);
 
         // Run the aggregator
         let input_file = "../../../test/resources/samples/measurements-3.txt";
