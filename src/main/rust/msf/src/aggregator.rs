@@ -19,7 +19,7 @@ pub fn process_file(filename: &str, output: &mut dyn Write) -> io::Result<()> {
 }
 
 struct MeasurementAggregator {
-    data: HashMap<[u8], Aggregate>,
+    data: HashMap<String, Aggregate>,
 }
 
 impl MeasurementAggregator {
@@ -31,15 +31,12 @@ impl MeasurementAggregator {
 
     fn add(&mut self, line: Vec<u8>) {
         let parts: Vec<&[u8]> = line.split(|x| *x == b';').collect();
-        let value_str = std::str::from_utf8_unchecked(parts[1]).expect("Invalid UTF-8 sequence");
-        let value: f32 = value_str.parse().expect("Invalid float value");
-        let value: f64 = parts[1]
-            .as_string_lossy()
-            .parse()
-            .expect("Invalid temperature value");
+        let value_str = std::str::from_utf8(&parts[1]).expect("Invalid UTF-8 sequence");
+        let value: f64 = value_str.parse().expect(format!("Invalid float value: {}", value_str).as_str());
         let temp = round(value);
+        let loc = std::str::from_utf8(parts[0]).expect("Invalid UTF-8 sequence").to_owned();
         self.data
-            .entry(parts[0].as_bytes())
+            .entry(loc)
             .and_modify(|agg| {
                 agg.add(temp);
             })
@@ -54,20 +51,19 @@ impl MeasurementAggregator {
     fn write(&self, output: &mut dyn Write) -> io::Result<()> {
         let mut keys: Vec<_> = self.data.keys().collect();
         keys.sort_unstable();
-        write!(output, "{{")?;
+        output.write_all(b"{")?;
         let mut first = true;
         for location in keys {
             let stats = &self.data[location];
             if !first {
-                write!(output, ", ")?;
+                output.write_all(b", ")?;
             }
-            io::Write::write(output, location.as_bytes())?;
-            write!(output, location)?;
-            write!(output, "=")?;
-            write!(output, stats.to_string())?;
+            output.write_all(location.as_bytes())?;
+            output.write_all(b"=")?;
+            output.write_all(stats.to_string().as_bytes())?;
             first = false;
         }
-        write!(output, "}}\n")?;
+        output.write_all(b"}\n")?;
         Ok(())
     }
 }
@@ -95,13 +91,9 @@ impl Aggregate {
 }
 
 type Temperature = f64;
-struct Measurement {
-    location: String,
-    temperature: Temperature,
-}
 
 // rounding floats to 1 decimal place with 0.05 rounding up to 0.1
-fn round(x: f64) -> f64 {
+fn round(x: Temperature) -> Temperature {
     ((x + 0.05) * 10.0).floor() / 10.0
 }
 
@@ -113,7 +105,7 @@ mod tests {
 
     #[test]
     fn test_process_file() {
-        let test_dir = "../../../../test/resources/samples/";
+        let test_dir = "../../../test/resources/samples/";
         let files = fs::read_dir(test_dir).unwrap();
 
         for file in files {
@@ -149,35 +141,20 @@ mod tests {
     fn test_measurement_aggregator() {
         let mut aggregator = MeasurementAggregator::new();
 
-        let measurement1 = Measurement {
-            location: "Location1".to_string(),
-            temperature: 25.0,
-        };
-        aggregator.add(measurement1);
+        let line1 = b"Location1;25.0".to_vec();
+        aggregator.add(line1);
 
-        let measurement2 = Measurement {
-            location: "Location2".to_string(),
-            temperature: 30.0,
-        };
-        aggregator.add(measurement2);
+        let line2 = b"Location2;30.0".to_vec();
+        aggregator.add(line2);
 
-        let measurement3 = Measurement {
-            location: "Location1".to_string(),
-            temperature: 20.0,
-        };
-        aggregator.add(measurement3);
+        let line3 = b"Location1;20.0".to_vec();
+        aggregator.add(line3);
 
-        let measurement4 = Measurement {
-            location: "Location2".to_string(),
-            temperature: 35.0,
-        };
-        aggregator.add(measurement4);
+        let line4 = b"Location2;35.0".to_vec();
+        aggregator.add(line4);
 
-        let measurement5 = Measurement {
-            location: "Location3".to_string(),
-            temperature: 15.0,
-        };
-        aggregator.add(measurement5);
+        let line5 = b"Location3;15.0".to_vec();
+        aggregator.add(line5);
 
         let mut expected_data = HashMap::new();
         expected_data.insert(
@@ -213,7 +190,7 @@ mod tests {
 
     #[bench]
     fn bench_process_file(b: &mut Bencher) {
-        let test_file = "../../../../test/resources/samples/measurements.bench";
+        let test_file = "../../../test/resources/samples/measurements.bench";
         b.iter(|| {
             let mut output = Vec::new();
             process_file(&test_file.to_string(), &mut output).unwrap();
