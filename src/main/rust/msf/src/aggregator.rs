@@ -1,36 +1,54 @@
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{self, BufRead, Write};
+use std::io::{self, BufRead, Seek, Write};
 
 pub fn process_file(filename: &str, output: &mut dyn Write) -> io::Result<()> {
-    let file = File::open(filename)?;
-    let reader = io::BufReader::new(file);
-
-    let mut aggregator = MeasurementAggregator::new();
-
-    for line in reader.lines() {
-        let line = line?;
-        aggregator.add(line);
-    }
-
-    aggregator.write(output)?;
-
+    let mut agg = MeasurementAggregator::new();
+    agg.process_file(filename, output)?;
     Ok(())
 }
 
-struct MeasurementAggregator {
+pub struct MeasurementAggregator {
     data: HashMap<String, Aggregate>,
 }
 
 impl MeasurementAggregator {
-    fn new() -> Self {
+    pub fn new() -> Self {
         MeasurementAggregator {
-            data: HashMap::new(),
+            data: HashMap::with_capacity(500),
         }
     }
 
-    fn add(&mut self, line: String) {   
-        let (location, temp ) = parse(line.as_str());
+    fn process_file(&mut self, filename: &str, output: &mut dyn Write) -> io::Result<()> {
+        self.run(filename, 0, 0)?;
+        self.write(output)?;
+        Ok(())
+    }
+
+    pub fn run(&mut self, filename: &str, start: u64, stop: u64) -> io::Result<()> {
+        let mut file = File::open(filename)?;
+        file.seek(io::SeekFrom::Start(start))?;
+        let reader = io::BufReader::new(file);
+        let mut offset = start;
+        let mut first = true;
+        for line in reader.lines() {
+            let line = line?;
+            offset += line.len() as u64 + 1;
+            if first && start != 0 {
+                first = false;
+                continue;
+            }
+            self.add(line);
+            if stop != 0 && offset > stop {
+                break;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn add(&mut self, line: String) {
+        let (location, temp) = parse(line.as_str());
         self.data
             .entry(location)
             .and_modify(|agg| {
@@ -44,7 +62,18 @@ impl MeasurementAggregator {
             });
     }
 
-    fn write(&self, output: &mut dyn Write) -> io::Result<()> {
+    pub fn merge(&mut self, other: &MeasurementAggregator) {
+        for (location, stats) in &other.data {
+            self.data
+                .entry(location.clone())
+                .and_modify(|agg| {
+                    agg.merge(&stats);
+                })
+                .or_insert(stats.clone());
+        }
+    }
+
+    pub fn write(&self, output: &mut dyn Write) -> io::Result<()> {
         let mut keys: Vec<_> = self.data.keys().collect();
         keys.sort_unstable();
         output.write_all(b"{")?;
@@ -64,7 +93,7 @@ impl MeasurementAggregator {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 struct Aggregate {
     min: Temperature,
     max: Temperature,
@@ -86,6 +115,13 @@ impl Aggregate {
         self.sum += measurement;
         self.count += 1;
     }
+
+    fn merge(&mut self, other: &Aggregate) {
+        self.min = self.min.min(other.min);
+        self.max = self.max.max(other.max);
+        self.sum += other.sum;
+        self.count += other.count;
+    }
 }
 
 type Temperature = i32;
@@ -95,12 +131,11 @@ fn parse(line: &str) -> (String, Temperature) {
     let parts: Vec<&str> = line.split(';').collect();
     let location = parts[0].to_owned();
     let value: f32 = parts[1].parse().expect("Invalid temperature value");
-    let temp = (round(value)* FLOAT2INT) as i32;
+    let temp = (round(value) * FLOAT2INT) as i32;
     return (location, temp);
 }
 
 // rounding floats to 1 decimal place with 0.05 rounding up to 0.1
-#[allow(dead_code)]
 fn round(x: f32) -> f32 {
     ((x + 0.05) * 10.0).floor() / 10.0
 }
