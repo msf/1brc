@@ -27,7 +27,6 @@ struct Task {
 struct ParallelMeasurementAggregator {
     workers: usize,
     task_tx: channel::Sender<Option<Task>>,
-    task_rx: channel::Receiver<Option<Task>>,
     worker_handles: Vec<thread::JoinHandle<()>>,
 }
 
@@ -69,7 +68,6 @@ impl ParallelMeasurementAggregator {
             .collect();
         ParallelMeasurementAggregator {
             workers,
-            task_rx: rx,
             task_tx: tx,
             worker_handles: handles,
         }
@@ -82,34 +80,28 @@ impl ParallelMeasurementAggregator {
         let chunk_size = file_size / chunks;
 
         let (tx, rx) = mpsc::channel();
-        let mut handles = Vec::with_capacity(self.chunks);
         for i in 0..chunks {
             let start = i * chunk_size;
-            let stop = if i != chunks - 1 {
+            let end = if i != chunks - 1 {
                 (i + 1) * chunk_size
             } else {
                 0
             };
 
-            let txi = tx.clone();
-            let fname = filename.to_string();
-            let handle = thread::spawn(move || {
-                let mut agg = aggregator::MeasurementAggregator::new();
-                agg.run(&fname, start, stop).unwrap();
-                txi.send(agg).unwrap();
-            });
-            handles.push(handle);
+            let t = Task {
+                start: start,
+                end: end,
+                filename: filename.to_string(),
+                response: tx.clone(),
+            };
+            self.task_tx.send(Some(t)).unwrap();
         }
         let mut result = aggregator::MeasurementAggregator::new();
-        for _ in 0..self.chunks {
+        for _ in 0..chunks {
             let part = rx.recv().unwrap();
             result.merge(&part);
         }
         result.write(output)?;
-
-        for handle in handles {
-            handle.join().unwrap();
-        }
         Ok(())
     }
 }

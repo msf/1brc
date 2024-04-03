@@ -141,8 +141,6 @@ fn round(x: f32) -> f32 {
 
 #[cfg(test)]
 mod tests {
-    use crate::aggregator;
-
     use super::*;
     use std::{fs, io::Read};
     use test::Bencher;
