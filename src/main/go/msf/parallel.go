@@ -9,81 +9,86 @@ import (
 	"sync"
 )
 
-type ParallelAggregator struct {
-	filename    string
-	fileSize    int64
-	chunkSize   int64
-	chunks      int
-	results     chan *AllMeasures
-	finalResult *AllMeasures
-}
-
 func ProcessFile(filename string, w io.Writer, chunks int) {
 	if chunks < 1 {
 		chunks = runtime.NumCPU()
 	}
 
-	aggregator := NewParallelAggregator(filename, chunks)
-	aggregator.Run()
-	aggregator.Print(w)
+	aggregator := NewParallelAggregator(chunks)
+	defer aggregator.Done()
+	aggregator.Process(filename, w)
 }
 
-func NewParallelAggregator(filename string, chunks int) *ParallelAggregator {
+type ParallelAggregator struct {
+	workers int
+	wg      sync.WaitGroup
+	tasks   chan task
+}
+
+type task struct {
+	filename string
+	start    int64
+	end      int64
+	resp     chan *MeasurementAggregator
+}
+
+func NewParallelAggregator(workers int) *ParallelAggregator {
+	pa := &ParallelAggregator{
+		workers: workers,
+		tasks:   make(chan task, workers),
+	}
+	for i := 0; i < workers; i++ {
+		pa.wg.Add(1)
+		go func() {
+			defer pa.wg.Done()
+			for task := range pa.tasks {
+				agg := NewAggregator().Process(task.filename, task.start, task.end)
+				task.resp <- agg
+			}
+		}()
+	}
+	return pa
+}
+
+func (pa *ParallelAggregator) Done() {
+	close(pa.tasks)
+	pa.wg.Wait()
+}
+
+func (pa *ParallelAggregator) Process(filename string, w io.Writer) *ParallelAggregator {
 	fileInfo, err := os.Stat(filename)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	return &ParallelAggregator{
-		filename:    filename,
-		fileSize:    fileInfo.Size(),
-		chunks:      chunks,
-		chunkSize:   fileInfo.Size() / int64(chunks),
-		results:     make(chan *AllMeasures, chunks),
-		finalResult: NewAggregator(),
-	}
-}
+	chunks := pa.workers
+	fileSize := fileInfo.Size()
+	chunkSize := fileSize / int64(chunks)
 
-func (pa *ParallelAggregator) Run() {
 	slog.Info("Processing file..",
-		"filename", pa.filename,
-		"chunks", pa.chunks,
-		"chunkSizeMiB", pa.chunkSize/(1024*1024),
-		"fileSizeMiB", pa.fileSize/(1024*1024),
+		"filename", filename,
+		"chunks", chunks,
+		"chunkSizeMiB", chunkSize/(1024*1024),
+		"fileSizeMiB", fileSize/(1024*1024),
 	)
-	var wg sync.WaitGroup
-	wg.Add(pa.chunks)
+	resultsChan := make(chan *MeasurementAggregator, chunks)
+	defer close(resultsChan)
 
-	for i := 0; i < pa.chunks; i++ {
-		go pa.ProcessChunk(i, &wg)
+	for i := 0; i < chunks; i++ {
+		start := int64(i) * chunkSize
+		end := int64(i+1) * chunkSize
+		if i == chunks-1 {
+			end = 0
+		}
+		pa.tasks <- task{filename, start, end, resultsChan}
 	}
 
-	go func() {
-		wg.Wait()
-		close(pa.results)
-	}()
-
-	for res := range pa.results {
-		pa.finalResult.Merge(res)
-		slog.Info("Merged 1 result",
-			"resCount", len(res.Locations),
-		)
+	result := NewAggregator()
+	for i := 0; i < chunks; i++ {
+		res := <-resultsChan
+		result.Merge(res)
 	}
-}
 
-func (pa *ParallelAggregator) ProcessChunk(chunkIndex int, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	start := int64(chunkIndex) * pa.chunkSize
-	end := int64(chunkIndex+1) * pa.chunkSize
-
-	if chunkIndex == pa.chunks-1 {
-		end = pa.fileSize
-	}
-	aggregator := NewAggregator().Run(pa.filename, start, end)
-	pa.results <- aggregator
-}
-
-func (pa *ParallelAggregator) Print(w io.Writer) {
-	pa.finalResult.Print(w)
+	result.writeTo(w)
+	return pa
 }

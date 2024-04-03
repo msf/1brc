@@ -3,8 +3,8 @@ all: lint test build
 test: lint bench
 	go test -timeout=60s -cover -race ./...
 
-bench: 
-	go test -bench=. -benchtime=10s -benchmem -count=3 ./...
+bench:
+	go test -bench=. -benchtime=3s -benchmem ./...
 
 build:
 	# static build for alpine
@@ -15,5 +15,5 @@ lint:
 	go vet ./...
 	go mod tidy
 
-setup: 
+setup:
 	go mod download

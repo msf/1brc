@@ -12,15 +12,20 @@ import (
 )
 
 func TestParallel_basic(t *testing.T) {
-	// Create a new instance of ParallelAggregator
-	aggregator := NewParallelAggregator("../../../test/resources/samples/measurements-3.txt", 8)
+	const testfile = "../../../test/resources/samples/measurements-3.txt"
+	const expectedOutputFilename = "../../../test/resources/samples/measurements-3.out"
+	// Read the expected output file
+	expectedOutput, err := os.ReadFile(expectedOutputFilename)
+	require.NoError(t, err)
 
-	// Run the aggregator
-	aggregator.Run()
+	aggregator := NewParallelAggregator(8)
+	defer aggregator.Done()
+
+	var buf bytes.Buffer
+	aggregator.Process(testfile, &buf)
 
 	// Verify the results
-	require.Equal(t, 2, len(aggregator.finalResult.Locations))
-	require.Equal(t, "-15.0/1.3/20.0", aggregator.finalResult.Locations["Bosaso"].String())
+	require.EqualValues(t, string(expectedOutput), buf.String())
 }
 
 func TestParallel_Samples(t *testing.T) {

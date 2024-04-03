@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"os"
 	"strconv"
 )
@@ -12,4 +13,10 @@ func main() {
 		chunks, _ = strconv.Atoi(os.Args[2])
 	}
 	ProcessFile(fName, os.Stdout, chunks)
+}
+
+func assertNoErr(err error, v ...any) {
+	if err != nil {
+		log.Fatal(err, v)
+	}
 }
