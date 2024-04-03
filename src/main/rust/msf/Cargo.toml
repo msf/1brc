@@ -12,3 +12,4 @@ debug = true
 debug = true
 
 [dependencies]
+crossbeam = "0.8.1"

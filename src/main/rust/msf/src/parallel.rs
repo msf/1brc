@@ -3,6 +3,8 @@ use std::io::{self, Write};
 use std::sync::mpsc;
 use std::thread;
 
+use crossbeam::channel::{self, Receiver};
+
 use crate::aggregator;
 
 pub fn process_file(
@@ -15,27 +17,78 @@ pub fn process_file(
     Ok(())
 }
 
+struct Task {
+    start: u64,
+    end: u64,
+    filename: String,
+    response: mpsc::Sender<aggregator::MeasurementAggregator>,
+}
+
 struct ParallelMeasurementAggregator {
-    chunks: usize,
+    workers: usize,
+    task_tx: channel::Sender<Option<Task>>,
+    task_rx: channel::Receiver<Option<Task>>,
+    worker_handles: Vec<thread::JoinHandle<()>>,
+}
+
+impl Drop for ParallelMeasurementAggregator {
+    fn drop(&mut self) {
+        for _ in &self.worker_handles {
+            self.task_tx.send(None).unwrap();
+        }
+
+        for handle in self.worker_handles.drain(..) {
+            handle.join().unwrap();
+        }
+    }
 }
 
 impl ParallelMeasurementAggregator {
-    fn new(chunks: usize) -> Self {
-        ParallelMeasurementAggregator { chunks }
+    fn new(workers: usize) -> Self {
+        let (tx, rx) = channel::bounded(workers);
+
+        let handles = (0..workers)
+            .map(|_| {
+                let rx: Receiver<Option<Task>> = rx.clone();
+                thread::spawn(move || {
+                    loop {
+                        match rx.recv() {
+                            Ok(part) => {
+                                let part = part.unwrap();
+                                let mut agg = aggregator::MeasurementAggregator::new();
+                                agg.process(part.filename.as_str(), part.start, part.end)
+                                    .unwrap();
+
+                                part.response.send(agg).unwrap();
+                            }
+                            Err(_) => break, // Shutdown the worker thread on error
+                        }
+                    }
+                })
+            })
+            .collect();
+        ParallelMeasurementAggregator {
+            workers,
+            task_rx: rx,
+            task_tx: tx,
+            worker_handles: handles,
+        }
     }
+
     fn process_file(&self, filename: &str, output: &mut dyn Write) -> io::Result<()> {
         let metadata = std::fs::metadata(&filename).unwrap();
         let file_size = metadata.len();
-        let chunk_size = file_size / self.chunks as u64;
+        let chunks = self.workers as u64;
+        let chunk_size = file_size / chunks;
 
         let (tx, rx) = mpsc::channel();
         let mut handles = Vec::with_capacity(self.chunks);
-        for i in 0..self.chunks {
-            let start = i as u64 * chunk_size;
-            let stop = if i == self.chunks - 1 {
-                0
+        for i in 0..chunks {
+            let start = i * chunk_size;
+            let stop = if i != chunks - 1 {
+                (i + 1) * chunk_size
             } else {
-                start + chunk_size
+                0
             };
 
             let txi = tx.clone();

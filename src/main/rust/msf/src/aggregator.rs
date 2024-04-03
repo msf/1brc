@@ -2,12 +2,6 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufRead, Seek, Write};
 
-pub fn process_file(filename: &str, output: &mut dyn Write) -> io::Result<()> {
-    let mut agg = MeasurementAggregator::new();
-    agg.process_file(filename, output)?;
-    Ok(())
-}
-
 pub struct MeasurementAggregator {
     data: HashMap<String, Aggregate>,
 }
@@ -19,32 +13,32 @@ impl MeasurementAggregator {
         }
     }
 
-    fn process_file(&mut self, filename: &str, output: &mut dyn Write) -> io::Result<()> {
-        self.run(filename, 0, 0)?;
-        self.write(output)?;
+    fn run(&mut self, filename: &str, output: &mut dyn Write) -> io::Result<()> {
+        self.process(filename, 0, 0)?.write(output)?;
         Ok(())
     }
 
-    pub fn run(&mut self, filename: &str, start: u64, stop: u64) -> io::Result<()> {
+    pub fn process(&mut self, filename: &str, start: u64, end: u64) -> io::Result<&Self> {
         let mut file = File::open(filename)?;
         file.seek(io::SeekFrom::Start(start))?;
         let reader = io::BufReader::new(file);
-        let mut offset = start;
+        let mut curr = start;
         let mut first = true;
         for line in reader.lines() {
             let line = line?;
-            offset += line.len() as u64 + 1;
+            curr += line.len() as u64 + 1;
             if first && start != 0 {
+                // skip the first line if we're starting in non zero offset, incomplete
                 first = false;
                 continue;
             }
             self.add(line);
-            if stop != 0 && offset > stop {
+            if end != 0 && curr > end {
                 break;
             }
         }
 
-        Ok(())
+        return Ok(self);
     }
 
     fn add(&mut self, line: String) {
@@ -79,14 +73,15 @@ impl MeasurementAggregator {
         output.write_all(b"{")?;
         let mut first = true;
         for location in keys {
-            let stats = &self.data[location];
+            let aggregate = &self.data[location];
             if !first {
                 output.write_all(b", ")?;
+            } else {
+                first = false
             }
             output.write_all(location.as_bytes())?;
             output.write_all(b"=")?;
-            output.write_all(stats.to_string().as_bytes())?;
-            first = false;
+            output.write_all(aggregate.to_string().as_bytes())?;
         }
         output.write_all(b"}\n")?;
         Ok(())
@@ -103,10 +98,9 @@ struct Aggregate {
 
 impl Aggregate {
     fn to_string(&self) -> String {
-        let t = self.sum as f32 / ((self.count as f32) * FLOAT2INT);
         let min = self.min as f32 / FLOAT2INT;
         let max = self.max as f32 / FLOAT2INT;
-        String::from(format!("{:.1}/{:.1}/{:.1}", min, round(t), max))
+        String::from(format!("{:.1}/{:.1}/{:.1}", min, self.avg(), max))
     }
 
     fn add(&mut self, measurement: Temperature) {
@@ -121,6 +115,11 @@ impl Aggregate {
         self.max = self.max.max(other.max);
         self.sum += other.sum;
         self.count += other.count;
+    }
+
+    fn avg(&self) -> f32 {
+        let t = self.sum as f32 / ((self.count as f32) * FLOAT2INT);
+        return round(t);
     }
 }
 
@@ -142,6 +141,8 @@ fn round(x: f32) -> f32 {
 
 #[cfg(test)]
 mod tests {
+    use crate::aggregator;
+
     use super::*;
     use std::{fs, io::Read};
     use test::Bencher;
@@ -169,7 +170,9 @@ mod tests {
                 .unwrap();
 
             let mut output = Vec::new();
-            process_file(&file_path.to_string_lossy(), &mut output).unwrap();
+            MeasurementAggregator::new()
+                .run(&file_path.to_string_lossy(), &mut output)
+                .unwrap();
 
             let output_str = String::from_utf8(output).unwrap();
             assert_eq!(
@@ -236,7 +239,9 @@ mod tests {
         let test_file = "../../../test/resources/samples/measurements.bench";
         b.iter(|| {
             let mut output = Vec::new();
-            process_file(&test_file.to_string(), &mut output).unwrap();
+            MeasurementAggregator::new()
+                .run(&test_file.to_string(), &mut output)
+                .unwrap();
         });
     }
 }
