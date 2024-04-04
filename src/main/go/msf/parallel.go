@@ -42,7 +42,7 @@ func NewParallelAggregator(workers int) *ParallelAggregator {
 		go func() {
 			defer pa.wg.Done()
 			for task := range pa.tasks {
-				agg := NewAggregator().Process(task.filename, task.start, task.end)
+				agg := NewAggregator().processChunk(task.filename, task.start, task.end)
 				task.resp <- agg
 			}
 		}()

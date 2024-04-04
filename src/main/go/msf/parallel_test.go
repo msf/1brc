@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,7 +19,7 @@ func TestParallel_basic(t *testing.T) {
 	expectedOutput, err := os.ReadFile(expectedOutputFilename)
 	require.NoError(t, err)
 
-	aggregator := NewParallelAggregator(8)
+	aggregator := NewParallelAggregator(32)
 	defer aggregator.Done()
 
 	var buf bytes.Buffer
@@ -49,11 +50,13 @@ func TestParallel_Samples(t *testing.T) {
 		if filepath.Ext(file.Name()) != ".txt" {
 			continue
 		}
+		aggregator := NewParallelAggregator(32)
+		defer aggregator.Done()
 		ok := t.Run(file.Name(), func(t *testing.T) {
 			inputFilePath := filepath.Join(samplesDir, file.Name())
 			var buf bytes.Buffer
 
-			ProcessFile(inputFilePath, &buf, 32 /*lots of chunks */)
+			aggregator.Process(inputFilePath, &buf)
 
 			// Define the expected output file path
 			baseName := strings.TrimSuffix(file.Name(), filepath.Ext(file.Name()))
@@ -71,9 +74,10 @@ func TestParallel_Samples(t *testing.T) {
 func BenchmarkParallelProcessFile(b *testing.B) {
 	const samplesDir = "../../../test/resources/samples/"
 	const inputFilePath = samplesDir + "measurements.bench"
-	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0666)
-	require.NoError(b, err)
+	aggregator := NewParallelAggregator(16)
+	defer aggregator.Done()
+
 	for i := 0; i < b.N; i++ {
-		ProcessFile(inputFilePath, devNull, 4)
+		aggregator.Process(inputFilePath, io.Discard)
 	}
 }

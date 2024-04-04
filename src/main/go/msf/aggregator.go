@@ -22,11 +22,11 @@ func NewAggregator() *MeasurementAggregator {
 	}
 }
 
-func (a *MeasurementAggregator) Run(filename string, w io.Writer) {
-	a.Process(filename, 0, 0).writeTo(w)
+func (a *MeasurementAggregator) process(filename string, w io.Writer) {
+	a.processChunk(filename, 0, 0).writeTo(w)
 }
 
-func (a *MeasurementAggregator) Process(filename string, start, end int64) *MeasurementAggregator {
+func (a *MeasurementAggregator) processChunk(filename string, start, end int64) *MeasurementAggregator {
 	file, err := os.Open(filename)
 	assertNoErr(err)
 	defer file.Close()
@@ -79,15 +79,13 @@ func (a *MeasurementAggregator) writeTo(dst io.Writer) {
 	for i, location := range sortedLocations {
 		aggregate := a.data[location]
 		if i > 0 {
-			w.WriteByte(',')
-			w.WriteByte(' ')
+			w.WriteString(", ")
 		}
 		w.WriteString(location)
 		w.WriteByte('=')
 		aggregate.writeTo(w)
 	}
-	w.WriteByte('}')
-	w.WriteByte('\n')
+	w.WriteString("}\n")
 	w.Flush()
 }
 

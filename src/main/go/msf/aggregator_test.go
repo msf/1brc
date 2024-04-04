@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -17,7 +16,7 @@ import (
 // SETUP
 // Importantly you need to call Run() once you've done what you need
 func TestMain(m *testing.M) {
-	log.SetOutput(ioutil.Discard)
+	log.SetOutput(io.Discard)
 	os.Exit(m.Run())
 }
 
@@ -41,7 +40,7 @@ func BenchmarkProcessFile(b *testing.B) {
 	const samplesDir = "../../../test/resources/samples/"
 	const inputFilePath = samplesDir + "measurements.bench"
 	for i := 0; i < b.N; i++ {
-		NewAggregator().Run(inputFilePath, io.Discard)
+		NewAggregator().process(inputFilePath, io.Discard)
 	}
 }
 
@@ -70,7 +69,7 @@ func TestAllMeasures_Print(t *testing.T) {
 			// Run
 			inputFilePath := filepath.Join(samplesDir, file.Name())
 			var buf bytes.Buffer
-			NewAggregator().Run(inputFilePath, &buf)
+			NewAggregator().process(inputFilePath, &buf)
 
 			// Define the expected output file path
 			baseName := strings.TrimSuffix(file.Name(), filepath.Ext(file.Name()))
