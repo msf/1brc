@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,15 +13,20 @@ import (
 )
 
 func TestParallel_basic(t *testing.T) {
-	// Create a new instance of ParallelAggregator
-	aggregator := NewParallelAggregator("../../../test/resources/samples/measurements-3.txt", 8)
+	const testfile = "../../../test/resources/samples/measurements-3.txt"
+	const expectedOutputFilename = "../../../test/resources/samples/measurements-3.out"
+	// Read the expected output file
+	expectedOutput, err := os.ReadFile(expectedOutputFilename)
+	require.NoError(t, err)
 
-	// Run the aggregator
-	aggregator.Run()
+	aggregator := NewParallelAggregator(32)
+	defer aggregator.Done()
+
+	var buf bytes.Buffer
+	aggregator.Process(testfile, &buf)
 
 	// Verify the results
-	require.Equal(t, 2, len(aggregator.finalResult.Locations))
-	require.Equal(t, "-15.0/1.3/20.0", aggregator.finalResult.Locations["Bosaso"].String())
+	require.EqualValues(t, string(expectedOutput), buf.String())
 }
 
 func TestParallel_Samples(t *testing.T) {
@@ -44,11 +50,13 @@ func TestParallel_Samples(t *testing.T) {
 		if filepath.Ext(file.Name()) != ".txt" {
 			continue
 		}
+		aggregator := NewParallelAggregator(32)
+		defer aggregator.Done()
 		ok := t.Run(file.Name(), func(t *testing.T) {
 			inputFilePath := filepath.Join(samplesDir, file.Name())
 			var buf bytes.Buffer
 
-			ProcessFile(inputFilePath, &buf, 32 /*lots of chunks */)
+			aggregator.Process(inputFilePath, &buf)
 
 			// Define the expected output file path
 			baseName := strings.TrimSuffix(file.Name(), filepath.Ext(file.Name()))
@@ -63,11 +71,13 @@ func TestParallel_Samples(t *testing.T) {
 	}
 }
 
-func BenchmarkParallelFullRun(b *testing.B) {
-	const inputFilePath = "measurements-bench.txt"
-	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0666)
-	require.NoError(b, err)
+func BenchmarkParallelProcessFile(b *testing.B) {
+	const samplesDir = "../../../test/resources/samples/"
+	const inputFilePath = samplesDir + "measurements.bench"
+	aggregator := NewParallelAggregator(16)
+	defer aggregator.Done()
+
 	for i := 0; i < b.N; i++ {
-		ProcessFile(inputFilePath, devNull, 0)
+		aggregator.Process(inputFilePath, io.Discard)
 	}
 }

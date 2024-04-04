@@ -1,19 +1,19 @@
 all: lint test build
 
-test: lint
+test: lint bench
 	go test -timeout=60s -cover -race ./...
 
-bench: test
-	go test -bench=. -benchmem -count=3 ./...
+bench:
+	go test -bench=. -benchtime=3s -benchmem ./...
 
 build:
 	# static build for alpine
-	GOOS=linux GOARCH=amd64 GOAMD64=v3 CGO_ENABLED=0 go build -ldflags="-w -s" .
+	CGO_ENABLED=0 go build -ldflags="-w -s" .
 
 lint:
 	go fmt ./...
 	go vet ./...
 	go mod tidy
 
-setup: 
+setup:
 	go mod download

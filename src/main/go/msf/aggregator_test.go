@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,34 +13,34 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// SETUP
+// Importantly you need to call Run() once you've done what you need
+func TestMain(m *testing.M) {
+	log.SetOutput(io.Discard)
+	os.Exit(m.Run())
+}
+
 func TestAllMeasures_AddMeasure(t *testing.T) {
 	// Create a new instance of AllMeasures
 	allMeasures := NewAggregator()
 
 	// Add measures to the AllMeasures instance
-	allMeasures.Add(measure{"Location1", 10 * FLOAT2INT})
-	allMeasures.Add(measure{"Location2", 20 * FLOAT2INT})
+	allMeasures.Add("Location1;10.0")
+	allMeasures.Add("Location2;20.0")
 
 	// Verify that the measures were added correctly
-	require.Equal(t, 2, len(allMeasures.Locations))
-	require.EqualValues(t, "10.0/10.0/10.0", allMeasures.Locations["Location1"].String())
+	require.Equal(t, 2, len(allMeasures.data))
+	require.EqualValues(t, "10.0/10.0/10.0", allMeasures.data["Location1"].String())
 
-	allMeasures.Add(measure{"Location1", 20 * FLOAT2INT})
-	require.EqualValues(t, "10.0/15.0/20.0", allMeasures.Locations["Location1"].String())
+	allMeasures.Add("Location1;20.0")
+	require.EqualValues(t, "10.0/15.0/20.0", allMeasures.data["Location1"].String())
 }
 
-func BenchmarkFullRun(b *testing.B) {
-	const inputFilePath = "measurements-bench.txt"
-	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0666)
-	require.NoError(b, err)
+func BenchmarkProcessFile(b *testing.B) {
+	const samplesDir = "../../../test/resources/samples/"
+	const inputFilePath = samplesDir + "measurements.bench"
 	for i := 0; i < b.N; i++ {
-		input, err := os.Open(inputFilePath)
-		require.NoError(b, err)
-
-		allMeasures := NewAggregator().Run(inputFilePath, 0, 0)
-		allMeasures.Print(devNull)
-
-		input.Close()
+		NewAggregator().process(inputFilePath, io.Discard)
 	}
 }
 
@@ -64,14 +66,10 @@ func TestAllMeasures_Print(t *testing.T) {
 			continue
 		}
 		ok := t.Run(file.Name(), func(t *testing.T) {
-			// Read the input file
+			// Run
 			inputFilePath := filepath.Join(samplesDir, file.Name())
-
-			allMeasures := NewAggregator().Run(inputFilePath, 0, 0)
-
-			// Call the Print() method
 			var buf bytes.Buffer
-			allMeasures.Print(&buf)
+			NewAggregator().process(inputFilePath, &buf)
 
 			// Define the expected output file path
 			baseName := strings.TrimSuffix(file.Name(), filepath.Ext(file.Name()))

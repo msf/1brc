@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 #
 #  Copyright 2023 The original authors
 #
@@ -15,6 +15,8 @@
 #  limitations under the License.
 #
 
-INPUT=${1:-"measurements.txt"}
-
-GOGC=500 GOMEMLIMIT=20GiB target/msf "$INPUT"
+pushd src/main/rust/msf
+cargo test
+cargo build -r
+popd
+cp -f src/main/rust/msf/target/release/msf1brc target/msfrust

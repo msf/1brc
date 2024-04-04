@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 #
 #  Copyright 2023 The original authors
 #
@@ -15,5 +15,6 @@
 #  limitations under the License.
 #
 
-make -C src/main/go/msf build
-cp -f src/main/go/msf/msf1brc target/msf
+INPUT=${1:-"measurements.txt"}
+
+target/msfrust "$INPUT"
