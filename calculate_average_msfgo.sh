@@ -17,4 +17,4 @@
 
 INPUT=${1:-"measurements.txt"}
 
-GOGC=500 GOMEMLIMIT=20GiB target/msfgo "$INPUT"  8
+GOGC=500 GOMEMLIMIT=20GiB target/msfgo "$INPUT"
