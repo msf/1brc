@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufRead, Seek, Write};
 
+use log::{debug };
+
 pub struct MeasurementAggregator {
     data: HashMap<String, Aggregate>,
 }
@@ -13,18 +15,21 @@ impl MeasurementAggregator {
         }
     }
 
-    fn run(&mut self, filename: &str, output: &mut dyn Write) -> io::Result<()> {
-        self.process(filename, 0, 0)?.write(output)?;
+    fn process(&mut self, filename: &str, output: &mut dyn Write) -> io::Result<()> {
+        self.process_chunk(filename, 0, 0)?.write(output)?;
         Ok(())
     }
 
-    pub fn process(&mut self, filename: &str, start: u64, end: u64) -> io::Result<&Self> {
+    pub fn process_chunk(&mut self, filename: &str, start: u64, end: u64) -> io::Result<&Self> {
         let mut file = File::open(filename)?;
-        file.seek(io::SeekFrom::Start(start))?;
+        let mut curr = file.seek(io::SeekFrom::Start(start))?;
         let reader = io::BufReader::new(file);
-        let mut curr = start;
         let mut first = true;
+
         for line in reader.lines() {
+            if end != 0 && curr > end {
+                break;
+            }
             let line = line?;
             curr += line.len() as u64 + 1;
             if first && start != 0 {
@@ -32,11 +37,10 @@ impl MeasurementAggregator {
                 first = false;
                 continue;
             }
+
             self.add(line);
-            if end != 0 && curr > end {
-                break;
-            }
         }
+        debug!("process bytes:{} curr:{} - ]{start}-{end}]", curr-start, curr);
 
         return Ok(self);
     }
@@ -82,6 +86,7 @@ impl MeasurementAggregator {
             output.write_all(location.as_bytes())?;
             output.write_all(b"=")?;
             output.write_all(aggregate.to_string().as_bytes())?;
+            debug!("{}: sum:{} count:{} min:{} max:{}", location, aggregate.sum, aggregate.count, aggregate.min, aggregate.max)
         }
         output.write_all(b"}\n")?;
         Ok(())
@@ -146,6 +151,35 @@ mod tests {
     use test::Bencher;
 
     #[test]
+    fn test_rounding() {
+        let _ = env_logger::try_init();
+
+        // Create a new instance of ParallelAggregator
+        let mut aggregator = MeasurementAggregator::new();
+
+        // Run the aggregator
+        let input_file = "../../../test/resources/samples/measurements-rounding.txt";
+        let expected_output_file = "../../../test/resources/samples/measurements-rounding.out";
+        let mut output = Vec::new();
+
+        let mut expected_output = String::new();
+        fs::File::open(&expected_output_file)
+            .unwrap()
+            .read_to_string(&mut expected_output)
+            .unwrap();
+
+        // run the aggregator
+        aggregator.process(input_file, &mut output).unwrap();
+
+        let output_str = String::from_utf8(output).unwrap();
+        assert_eq!(
+            output_str, expected_output,
+            "Failed for file: {}",
+            input_file
+        );
+    }
+
+    #[test]
     fn test_process_file() {
         let test_dir = "../../../test/resources/samples/";
         let files = fs::read_dir(test_dir).unwrap();
@@ -169,7 +203,7 @@ mod tests {
 
             let mut output = Vec::new();
             MeasurementAggregator::new()
-                .run(&file_path.to_string_lossy(), &mut output)
+                .process(&file_path.to_string_lossy(), &mut output)
                 .unwrap();
 
             let output_str = String::from_utf8(output).unwrap();
@@ -238,7 +272,7 @@ mod tests {
         b.iter(|| {
             let mut output = Vec::new();
             MeasurementAggregator::new()
-                .run(&test_file.to_string(), &mut output)
+                .process(&test_file.to_string(), &mut output)
                 .unwrap();
         });
     }

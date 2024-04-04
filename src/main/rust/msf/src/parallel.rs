@@ -3,6 +3,8 @@ use std::io::{self, Write};
 use std::sync::mpsc;
 use std::thread;
 
+use log::{debug};
+
 use crossbeam::channel::{self, Receiver};
 
 use crate::aggregator;
@@ -13,7 +15,7 @@ pub fn process_file(
     chunks: usize,
 ) -> io::Result<()> {
     let agg = ParallelMeasurementAggregator::new(chunks);
-    agg.process_file(filename, output)?;
+    agg.process(filename, output)?;
     Ok(())
 }
 
@@ -52,20 +54,21 @@ impl ParallelMeasurementAggregator {
                 thread::spawn(move || {
                     loop {
                         match rx.recv() {
-                            Ok(part) => {
-                                let part = part.unwrap();
+                            Ok(Some(part)) => {
                                 let mut agg = aggregator::MeasurementAggregator::new();
-                                agg.process(part.filename.as_str(), part.start, part.end)
+                                agg.process_chunk(part.filename.as_str(), part.start, part.end)
                                     .unwrap();
 
                                 part.response.send(agg).unwrap();
                             }
-                            Err(_) => break, // Shutdown the worker thread on error
+                            Ok(None) => break, // Shutdown the worker thread on None value
+                            Err(_) => break,   // Shutdown the worker thread on error
                         }
                     }
                 })
             })
             .collect();
+
         ParallelMeasurementAggregator {
             workers,
             task_tx: tx,
@@ -73,21 +76,22 @@ impl ParallelMeasurementAggregator {
         }
     }
 
-    fn process_file(&self, filename: &str, output: &mut dyn Write) -> io::Result<()> {
+    fn process(&self, filename: &str, output: &mut dyn Write) -> io::Result<()> {
         let metadata = std::fs::metadata(&filename).unwrap();
         let file_size = metadata.len();
-        let chunks = self.workers as u64;
-        let chunk_size = file_size / chunks;
+        let min_chunk_size = 1024_u64;
+        let chunk_size = file_size.min(min_chunk_size.max(file_size / self.workers as u64));
+        let chunks = file_size / chunk_size + 1;
 
         let (tx, rx) = mpsc::channel();
         for i in 0..chunks {
             let start = i * chunk_size;
-            let end = if i != chunks - 1 {
-                (i + 1) * chunk_size
-            } else {
-                0
-            };
+            let mut end = (i + 1) * chunk_size;
+            if i == chunks - 1 {
+                end = 0;
+            }
 
+            debug!("size:{}, Task: {} - ]{}-{}]", file_size, i, start, end);
             let t = Task {
                 start: start,
                 end: end,
@@ -110,17 +114,48 @@ impl ParallelMeasurementAggregator {
 mod tests {
     use super::*;
     use std::{fs, io::Read};
-    //    use test::Bencher;
+    use test::Bencher;
+
+    #[test]
+    fn test_rounding() {
+        let _ = env_logger::try_init();
+
+        // Create a new instance of ParallelAggregator
+        let aggregator = ParallelMeasurementAggregator::new(16);
+
+        // Run the aggregator
+        let input_file = "../../../test/resources/samples/measurements-rounding.txt";
+        let expected_output_file = "../../../test/resources/samples/measurements-rounding.out";
+        let mut output = Vec::new();
+
+        let mut expected_output = String::new();
+        fs::File::open(&expected_output_file)
+            .unwrap()
+            .read_to_string(&mut expected_output)
+            .unwrap();
+
+        // run the aggregator
+        aggregator.process(input_file, &mut output).unwrap();
+
+        let output_str = String::from_utf8(output).unwrap();
+        assert_eq!(
+            output_str, expected_output,
+            "Failed for file: {}",
+            input_file
+        );
+    }
 
     #[test]
     fn test_parallel_basic() {
+        let _ = env_logger::try_init();
+
         // Create a new instance of ParallelAggregator
         let aggregator = ParallelMeasurementAggregator::new(16);
 
         // Run the aggregator
         let input_file = "../../../test/resources/samples/measurements-3.txt";
         let mut output = Vec::new();
-        aggregator.process_file(input_file, &mut output).unwrap();
+        aggregator.process(input_file, &mut output).unwrap();
 
         let expected_output_file = "../../../test/resources/samples/measurements-3.out";
         let mut expected_output = String::new();
@@ -136,8 +171,6 @@ mod tests {
             input_file
         );
     }
-
-    use test::Bencher;
 
     #[test]
     fn test_process_file() {
@@ -164,7 +197,7 @@ mod tests {
 
             let mut output = Vec::new();
             aggregator
-                .process_file(&file_path.to_string_lossy(), &mut output)
+                .process(&file_path.to_string_lossy(), &mut output)
                 .unwrap();
 
             let output_str = String::from_utf8(output).unwrap();
@@ -179,10 +212,10 @@ mod tests {
     #[bench]
     fn bench_process_file(b: &mut Bencher) {
         let test_file = "../../../test/resources/samples/measurements.bench";
+        let agg = ParallelMeasurementAggregator::new(16);
         b.iter(|| {
-            let agg = ParallelMeasurementAggregator::new(16);
             let mut output = Vec::new();
-            agg.process_file(&test_file.to_string(), &mut output)
+            agg.process(&test_file.to_string(), &mut output)
                 .unwrap();
         });
     }
