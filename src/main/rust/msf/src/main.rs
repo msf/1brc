@@ -9,15 +9,15 @@ use std::io;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    let mut chunks = 10_usize;
+    let mut workers = 10_usize;
     if args.len() < 2 {
-        eprintln!("Usage: {} <filename> ?chunks", args[0]);
+        eprintln!("Usage: {} <filename> ?workers", args[0]);
         return;
     } else if args.len() == 3 {
-        chunks = args[2].parse().expect("Invalid number of chunks");
+        workers = args[2].parse().expect("Invalid number of workers");
     }
 
-    if let Err(err) = parallel::process_file(&args[1], &mut io::stdout(), chunks) {
+    if let Err(err) = parallel::process_file(&args[1], &mut io::stdout(), workers) {
         eprintln!("Error: {}", err);
     }
 }

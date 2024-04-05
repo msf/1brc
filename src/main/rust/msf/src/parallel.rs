@@ -3,7 +3,7 @@ use std::io::{self, Write};
 use std::sync::mpsc;
 use std::thread;
 
-use log::{debug};
+use log::debug;
 
 use crossbeam::channel::{self, Receiver};
 
@@ -215,8 +215,7 @@ mod tests {
         let agg = ParallelMeasurementAggregator::new(16);
         b.iter(|| {
             let mut output = Vec::new();
-            agg.process(&test_file.to_string(), &mut output)
-                .unwrap();
+            agg.process(&test_file.to_string(), &mut output).unwrap();
         });
     }
 }

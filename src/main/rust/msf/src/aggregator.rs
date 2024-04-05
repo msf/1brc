@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufRead, Seek, Write};
 
-use log::{debug };
+use log::debug;
 
 pub struct MeasurementAggregator {
     data: HashMap<String, Aggregate>,
@@ -40,7 +40,11 @@ impl MeasurementAggregator {
 
             self.add(line);
         }
-        debug!("process bytes:{} curr:{} - ]{start}-{end}]", curr-start, curr);
+        debug!(
+            "process bytes:{} curr:{} - ]{start}-{end}]",
+            curr - start,
+            curr
+        );
 
         return Ok(self);
     }
@@ -86,7 +90,10 @@ impl MeasurementAggregator {
             output.write_all(location.as_bytes())?;
             output.write_all(b"=")?;
             output.write_all(aggregate.to_string().as_bytes())?;
-            debug!("{}: sum:{} count:{} min:{} max:{}", location, aggregate.sum, aggregate.count, aggregate.min, aggregate.max)
+            debug!(
+                "{}: sum:{} count:{} min:{} max:{}",
+                location, aggregate.sum, aggregate.count, aggregate.min, aggregate.max
+            )
         }
         output.write_all(b"}\n")?;
         Ok(())
