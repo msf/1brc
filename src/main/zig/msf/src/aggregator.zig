@@ -1,7 +1,7 @@
 const std = @import("std");
 const sort = std.sort;
 
-const Aggregator = struct {
+pub const Aggregator = struct {
     allocator: std.mem.Allocator,
     data: std.AutoHashMap(u64, Aggregate),
     names: std.ArrayList([]const u8),
@@ -223,7 +223,6 @@ test "test ALL files" {
     const baseDir = "/home/miguel/play/1brc/src/test/resources/samples/";
 
     const dir = try std.fs.openDirAbsolute(baseDir, .{ .iterate = true });
-    defer dir.close();
 
     var it = dir.iterate();
     while (try it.next()) |entry| {
@@ -235,12 +234,12 @@ test "test ALL files" {
         }
         var expectedOutputFilename: [100]u8 = undefined;
         var inputFile: [100]u8 = undefined;
+        try std.fs.realpath(entry.name, inputFile[0..]);
         _ = try std.fmt.bufPrint(
             &expectedOutputFilename,
             "{s}{s}.out",
             .{ baseDir, entry.name[0..(entry.name.len - 4)] },
         );
-        _ = try std.fmt.bufPrint(&inputFile, "{s}{s}", .{ baseDir, entry.name });
 
         testSingleFile(inputFile[0..], expectedOutputFilename[0..]) catch |err| {
             std.debug.print(
@@ -263,14 +262,14 @@ fn testSingleFile(filename: []const u8, expectedOutputFilename: []const u8) !voi
     var aggregator = try Aggregator.init(alloc);
     defer aggregator.deinit();
 
+    // run
+    try aggregator.process(filename, output.writer());
+
     // read expected output file
     var file = try std.fs.cwd().openFile(expectedOutputFilename, .{ .mode = .read_only });
     defer file.close();
     const bytes_read = try file.readAll(&bufExpected);
     const outputExpected = bufExpected[0..bytes_read];
-
-    // run
-    try aggregator.process(filename, output.writer());
 
     try testing.expectEqualStrings(outputExpected, output.getWritten());
 }
