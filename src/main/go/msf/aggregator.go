@@ -9,16 +9,21 @@ import (
 	"os"
 	"sort"
 	"strconv"
-	"strings"
+
+	"github.com/cespare/xxhash/v2"
 )
 
+type Temperature int32
+
 type MeasurementAggregator struct {
-	data map[string]*aggregate
+	data      map[uint64]*aggregate
+	locations []string
 }
 
 func NewAggregator() *MeasurementAggregator {
 	return &MeasurementAggregator{
-		data: make(map[string]*aggregate),
+		data:      make(map[uint64]*aggregate, 1000),
+		locations: make([]string, 0, 1000),
 	}
 }
 
@@ -35,13 +40,14 @@ func (a *MeasurementAggregator) processChunk(filename string, start, end int64) 
 	scanner := bufio.NewScanner(file)
 	first := true
 	for scanner.Scan() && (end == 0 || curr <= end) {
-		curr += int64(len(scanner.Bytes())) + 1
+		line := scanner.Bytes()
+		curr += int64(len(line)) + 1
 		if first && start != 0 {
 			// skip the first line if we're starting in non zero offset, incomplete
 			first = false
 			continue
 		}
-		a.Add(scanner.Text())
+		a.Add(line)
 	}
 
 	err = scanner.Err()
@@ -49,10 +55,13 @@ func (a *MeasurementAggregator) processChunk(filename string, start, end int64) 
 	return a
 }
 
-func (a *MeasurementAggregator) Add(line string) {
+func (a *MeasurementAggregator) Add(line []byte) {
 	loc, temp := parse(line)
-	if rec, ok := a.data[loc]; !ok {
-		a.data[loc] = &aggregate{Max: temp, Min: temp, Sum: temp, Count: 1}
+	id := xxhash.Sum64(loc)
+	if rec, ok := a.data[id]; !ok {
+		sloc := string(loc)
+		a.data[id] = &aggregate{Max: temp, Min: temp, Sum: temp, Count: 1, Location: sloc}
+		a.locations = append(a.locations, sloc)
 	} else {
 		rec.Add(temp)
 	}
@@ -62,6 +71,7 @@ func (a *MeasurementAggregator) Merge(b *MeasurementAggregator) {
 	for location, aggregate := range b.data {
 		if rec, ok := a.data[location]; !ok {
 			a.data[location] = aggregate
+			a.locations = append(a.locations, aggregate.Location)
 		} else {
 			rec.Merge(aggregate)
 		}
@@ -69,15 +79,12 @@ func (a *MeasurementAggregator) Merge(b *MeasurementAggregator) {
 }
 
 func (a *MeasurementAggregator) writeTo(dst io.Writer) {
-	sortedLocations := make([]string, 0, len(a.data))
-	for location := range a.data {
-		sortedLocations = append(sortedLocations, location)
-	}
-	sort.Strings(sortedLocations)
+	sort.Strings(a.locations)
 	w := bufio.NewWriter(dst)
 	w.WriteByte('{')
-	for i, location := range sortedLocations {
-		aggregate := a.data[location]
+	for i, location := range a.locations {
+		id := xxhash.Sum64String(location)
+		aggregate := a.data[id]
 		if i > 0 {
 			w.WriteString(", ")
 		}
@@ -90,10 +97,11 @@ func (a *MeasurementAggregator) writeTo(dst io.Writer) {
 }
 
 type aggregate struct {
-	Max   Temperature
-	Min   Temperature
-	Sum   Temperature
-	Count uint32
+	Max      Temperature
+	Min      Temperature
+	Sum      Temperature
+	Count    uint32
+	Location string
 }
 
 func (a *aggregate) Add(temp Temperature) {
@@ -129,8 +137,6 @@ func (a *aggregate) String() string {
 	return buf.String()
 }
 
-type Temperature int32
-
 const FLOAT2INT = 10
 
 type Writer interface {
@@ -138,17 +144,31 @@ type Writer interface {
 	io.ByteWriter
 }
 
-func parse(s string) (string, Temperature) {
-	loc, tmp, ok := strings.Cut(s, ";")
-	if !ok {
-		log.Fatal("parse error, line: ", s)
+func parse(s []byte) ([]byte, Temperature) {
+	idx := bytes.LastIndexByte(s, ';')
+	if idx == -1 {
+		log.Fatal("parse error, line: ", string(s))
 	}
-	val, err := strconv.ParseFloat(tmp, 32)
-	if err != nil {
-		log.Fatalf("invalid temperature value: %v, line: %v, err: %v", tmp, s, err)
-	}
-	temp := Temperature(round(val) * FLOAT2INT)
+	loc := s[:idx]
+	val := parseInt(s[idx+1:])
+	temp := Temperature(val)
 	return loc, temp
+}
+
+func parseInt(s []byte) int {
+	num := 0
+	sign := 1
+	for i, r := range s {
+		if i == 0 && r == '-' {
+			sign = -1
+			continue
+		}
+		if r < '0' || r > '9' {
+			continue
+		}
+		num = num*10 + int(r-'0')
+	}
+	return num * sign
 }
 
 // rounding floats to 1 decimal place with 0.05 rounding up to 0.1
