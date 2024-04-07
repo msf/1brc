@@ -10,10 +10,15 @@ debug = true
 
 [profile.bench]
 debug = true
+opt-level = 3
 
 [dependencies]
 crossbeam = "0.8.1"
 log = "0.4"
+[dependencies.xxhash-rust]
+version = "0.8.5"
+features = ["xxh3", "const_xxh3"]
 
 [dev-dependencies]
 env_logger = "*"
+
