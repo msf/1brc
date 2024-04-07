@@ -9,7 +9,6 @@ import (
 	"os"
 	"sort"
 	"strconv"
-	"strings"
 )
 
 type MeasurementAggregator struct {
@@ -41,7 +40,7 @@ func (a *MeasurementAggregator) processChunk(filename string, start, end int64) 
 			first = false
 			continue
 		}
-		a.Add(scanner.Text())
+		a.Add(scanner.Bytes())
 	}
 
 	err = scanner.Err()
@@ -49,7 +48,7 @@ func (a *MeasurementAggregator) processChunk(filename string, start, end int64) 
 	return a
 }
 
-func (a *MeasurementAggregator) Add(line string) {
+func (a *MeasurementAggregator) Add(line []byte) {
 	loc, temp := parse(line)
 	if rec, ok := a.data[loc]; !ok {
 		a.data[loc] = &aggregate{Max: temp, Min: temp, Sum: temp, Count: 1}
@@ -138,17 +137,31 @@ type Writer interface {
 	io.ByteWriter
 }
 
-func parse(s string) (string, Temperature) {
-	loc, tmp, ok := strings.Cut(s, ";")
-	if !ok {
-		log.Fatal("parse error, line: ", s)
+func parse(s []byte) (string, Temperature) {
+	idx := bytes.LastIndexByte(s, ';')
+	if idx == -1 {
+		log.Fatal("parse error, line: ", string(s))
 	}
-	val, err := strconv.ParseFloat(tmp, 32)
-	if err != nil {
-		log.Fatalf("invalid temperature value: %v, line: %v, err: %v", tmp, s, err)
-	}
-	temp := Temperature(round(val) * FLOAT2INT)
+	loc := string(s[:idx])
+	val := parseInt(s[idx+1:])
+	temp := Temperature(val)
 	return loc, temp
+}
+
+func parseInt(s []byte) int {
+	num := 0
+	sign := 1
+	for i, r := range s {
+		if i == 0 && r == '-' {
+			sign = -1
+			continue
+		}
+		if r < '0' || r > '9' {
+			continue
+		}
+		num = num*10 + int(r-'0')
+	}
+	return num * sign
 }
 
 // rounding floats to 1 decimal place with 0.05 rounding up to 0.1

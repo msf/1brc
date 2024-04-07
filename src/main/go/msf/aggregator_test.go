@@ -25,14 +25,14 @@ func TestAllMeasures_AddMeasure(t *testing.T) {
 	allMeasures := NewAggregator()
 
 	// Add measures to the AllMeasures instance
-	allMeasures.Add("Location1;10.0")
-	allMeasures.Add("Location2;20.0")
+	allMeasures.Add([]byte("Location1;10.0"))
+	allMeasures.Add([]byte("Location2;20.0"))
 
 	// Verify that the measures were added correctly
 	require.Equal(t, 2, len(allMeasures.data))
 	require.EqualValues(t, "10.0/10.0/10.0", allMeasures.data["Location1"].String())
 
-	allMeasures.Add("Location1;20.0")
+	allMeasures.Add([]byte("Location1;20.0"))
 	require.EqualValues(t, "10.0/15.0/20.0", allMeasures.data["Location1"].String())
 }
 
