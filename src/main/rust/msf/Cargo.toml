@@ -10,6 +10,7 @@ debug = true
 
 [profile.bench]
 debug = true
+opt-level = 3
 
 [dependencies]
 crossbeam = "0.8.1"
@@ -17,3 +18,4 @@ log = "0.4"
 
 [dev-dependencies]
 env_logger = "*"
+

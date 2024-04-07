@@ -16,7 +16,6 @@
 #
 
 pushd src/main/rust/msf
-cargo test
-cargo build -r
+make build
 popd
-cp -f src/main/rust/msf/target/release/msf1brc target/msfrust
+cp -f src/main/rust/msf/msf1brc target/msfrust

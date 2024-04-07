@@ -23,8 +23,30 @@ impl MeasurementAggregator {
     pub fn process_chunk(&mut self, filename: &str, start: u64, end: u64) -> io::Result<&Self> {
         let mut file = File::open(filename)?;
         let mut curr = file.seek(io::SeekFrom::Start(start))?;
-        let reader = io::BufReader::new(file);
+        let mut reader = io::BufReader::new(file);
         let mut first = true;
+
+        let mut buffer = Vec::with_capacity(256);
+        loop {
+            buffer.clear();
+            let bytes_read = reader.read_until(b'\n', &mut buffer)?;
+            if bytes_read == 0 {
+                break;
+            }
+            if end != 0 && curr > end {
+                break;
+            }
+            curr += bytes_read as u64;
+            if first && start != 0 {
+                // skip the first line if we're starting in non zero offset, incomplete
+                first = false;
+                continue;
+            }
+            // Remove the newline character from the end of the buffer
+            let line = &buffer[..buffer.len() - 1];
+
+            self.add(line);
+        }
 
         for line in reader.lines() {
             if end != 0 && curr > end {
@@ -32,13 +54,6 @@ impl MeasurementAggregator {
             }
             let line = line?;
             curr += line.len() as u64 + 1;
-            if first && start != 0 {
-                // skip the first line if we're starting in non zero offset, incomplete
-                first = false;
-                continue;
-            }
-
-            self.add(line);
         }
         debug!(
             "process bytes:{} curr:{} - ]{start}-{end}]",
@@ -49,8 +64,8 @@ impl MeasurementAggregator {
         return Ok(self);
     }
 
-    fn add(&mut self, line: String) {
-        let (location, temp) = parse(line.as_str());
+    fn add(&mut self, line: &[u8]) {
+        let (location, temp) = parse(line);
         self.data
             .entry(location)
             .and_modify(|agg| {
@@ -138,12 +153,28 @@ impl Aggregate {
 type Temperature = i32;
 const FLOAT2INT: f32 = 10.0;
 
-fn parse(line: &str) -> (String, Temperature) {
-    let parts: Vec<&str> = line.split(';').collect();
-    let location = parts[0].to_owned();
-    let value: f32 = parts[1].parse().expect("Invalid temperature value");
-    let temp = (round(value) * FLOAT2INT) as i32;
+fn parse(line: &[u8]) -> (String, Temperature) {
+    let parts: Vec<_> = line.split(|&x| x == b';').collect();
+    let location = String::from_utf8(parts[0].to_vec()).unwrap();
+    let temp = parsei32(parts[1]);
     return (location, temp);
+}
+
+fn parsei32(val: &[u8]) -> i32 {
+    let mut num: i32 = 0;
+    let mut sign: i32 = 1;
+    let ascii_zero = '0' as i32;
+    for (i, c) in val.iter().enumerate() {
+        if i == 0 && *c == b'-' {
+            sign = -1;
+            continue;
+        }
+        if *c < b'0' || *c > b'9' {
+            continue;
+        }
+        num = num * 10 + ((*c as i32) - ascii_zero);
+    }
+    return num * sign;
 }
 
 // rounding floats to 1 decimal place with 0.05 rounding up to 0.1
@@ -226,19 +257,19 @@ mod tests {
     fn test_measurement_aggregator() {
         let mut aggregator = MeasurementAggregator::new();
 
-        let line1 = "Location1;25.0".to_string();
+        let line1 = b"Location1;25.0";
         aggregator.add(line1);
 
-        let line2 = "Location2;30.0".to_string();
+        let line2 = b"Location2;30.0";
         aggregator.add(line2);
 
-        let line3 = "Location1;20.0".to_string();
+        let line3 = b"Location1;20.0";
         aggregator.add(line3);
 
-        let line4 = "Location2;35.0".to_string();
+        let line4 = b"Location2;35.0";
         aggregator.add(line4);
 
-        let line5 = "Location3;15.0".to_string();
+        let line5 = b"Location3;15.0";
         aggregator.add(line5);
 
         let mut expected_data = HashMap::new();
