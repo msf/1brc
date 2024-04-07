@@ -1,23 +1,24 @@
 const std = @import("std");
+const Aggregator = @import("aggregator.zig").Aggregator;
 
 pub fn main() !void {
     // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
     std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
 
-    // stdout is for the actual output of your application, for example if you
-    // are implementing gzip, then only the compressed bytes should be sent to
-    // stdout, not any debugging messages.
-    const stdout_file = std.io.getStdOut().writer();
-    var bw = std.io.bufferedWriter(stdout_file);
-    const stdout = bw.writer();
+    const stdout = std.io.getStdOut().writer();
+    defer stdout.flush();
 
-    try stdout.print("Run `zig build test` to run the tests.\n", .{});
-    try bw.flush();
-}
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
 
-test "simple test" {
-    var list = std.ArrayList(i32).init(std.testing.allocator);
-    defer list.deinit(); // try commenting this out and see if zig detects the memory leak!
-    try list.append(42);
-    try std.testing.expectEqual(@as(i32, 42), list.pop());
+    var args = std.process.argsWithoutAllocator(arena);
+    _ = args.skip();
+    const filename = try args.next(arena);
+    const worker_count = try std.fmt.parseInt(usize, try args.next(arena), 10) orelse 10;
+    std.log.info("opening {s} with {d} workers", .{ filename, worker_count });
+
+    var agg = Aggregator.init(arena);
+    agg.process(filename, stdout) catch |err| {
+        std.log.err("failed to process file: {s}", .{@errorName(err)});
+    };
 }
