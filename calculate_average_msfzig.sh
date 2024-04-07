@@ -17,4 +17,4 @@
 
 INPUT=${1:-"measurements.txt"}
 
-target/msfrust "$INPUT"
+target/msfzig "$INPUT"
