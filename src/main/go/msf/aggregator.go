@@ -3,27 +3,30 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"hash"
+	"hash/fnv"
 	"io"
 	"log"
 	"math"
 	"os"
 	"sort"
 	"strconv"
-
-	"github.com/cespare/xxhash/v2"
 )
 
 type Temperature int32
+type hashSize uint32
 
 type MeasurementAggregator struct {
-	data      map[uint64]*aggregate
+	data      map[hashSize]*aggregate
 	locations []string
+	hasher    hash.Hash32
 }
 
 func NewAggregator() *MeasurementAggregator {
 	return &MeasurementAggregator{
-		data:      make(map[uint64]*aggregate, 1000),
+		data:      make(map[hashSize]*aggregate, 1000),
 		locations: make([]string, 0, 1000),
+		hasher:    fnv.New32a(),
 	}
 }
 
@@ -57,7 +60,7 @@ func (a *MeasurementAggregator) processChunk(filename string, start, end int64) 
 
 func (a *MeasurementAggregator) Add(line []byte) {
 	loc, temp := parse(line)
-	id := xxhash.Sum64(loc)
+	id := a.hash(loc)
 	if rec, ok := a.data[id]; !ok {
 		sloc := string(loc)
 		a.data[id] = &aggregate{Max: temp, Min: temp, Sum: temp, Count: 1, Location: sloc}
@@ -65,6 +68,12 @@ func (a *MeasurementAggregator) Add(line []byte) {
 	} else {
 		rec.Add(temp)
 	}
+}
+
+func (a *MeasurementAggregator) hash(loc []byte) hashSize {
+	a.hasher.Reset()
+	a.hasher.Write(loc)
+	return hashSize(a.hasher.Sum32())
 }
 
 func (a *MeasurementAggregator) Merge(b *MeasurementAggregator) {
@@ -83,7 +92,7 @@ func (a *MeasurementAggregator) writeTo(dst io.Writer) {
 	w := bufio.NewWriter(dst)
 	w.WriteByte('{')
 	for i, location := range a.locations {
-		id := xxhash.Sum64String(location)
+		id := a.hash([]byte(location))
 		aggregate := a.data[id]
 		if i > 0 {
 			w.WriteString(", ")

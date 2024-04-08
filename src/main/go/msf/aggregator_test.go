@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cespare/xxhash/v2"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,7 +29,7 @@ func TestAllMeasures_AddMeasure(t *testing.T) {
 	allMeasures.Add([]byte("Location2;20.0"))
 
 	// Verify that the measures were added correctly
-	id1 := xxhash.Sum64String("Location1")
+	id1 := allMeasures.hash([]byte("Location1"))
 	require.Equal(t, 2, len(allMeasures.data))
 	require.EqualValues(t, "10.0/10.0/10.0", allMeasures.data[id1].String())
 
@@ -39,8 +38,7 @@ func TestAllMeasures_AddMeasure(t *testing.T) {
 }
 
 func BenchmarkProcessFile(b *testing.B) {
-	const samplesDir = "../../../test/resources/samples/"
-	const inputFilePath = samplesDir + "measurements.bench"
+	const inputFilePath = "../../../../measurements_10M.txt"
 	for i := 0; i < b.N; i++ {
 		NewAggregator().process(inputFilePath, io.Discard)
 	}
