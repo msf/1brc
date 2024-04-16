@@ -13,6 +13,7 @@ debug = true
 opt-level = 3
 
 [dependencies]
+ahash = "0.8.11"
 crossbeam = "0.8.1"
 log = "0.4"
 [dependencies.xxhash-rust]

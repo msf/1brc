@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use ahash::AHashMap;
 use std::fs::File;
 use std::io::{self, BufRead, Seek, Write};
 use xxhash_rust::const_xxh3::xxh3_64 as xxhash64;
@@ -6,14 +6,14 @@ use xxhash_rust::const_xxh3::xxh3_64 as xxhash64;
 use log::debug;
 
 pub struct MeasurementAggregator {
-    data: HashMap<u64, Aggregate>,
+    data: AHashMap<u64, Aggregate>,
     locations: Vec<String>,
 }
 
 impl MeasurementAggregator {
     pub fn new() -> Self {
         MeasurementAggregator {
-            data: HashMap::with_capacity(1000),
+            data: AHashMap::with_capacity(1000),
             locations: Vec::with_capacity(1000),
         }
     }
