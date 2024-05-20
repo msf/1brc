@@ -1,5 +1,6 @@
 const std = @import("std");
 const sort = std.sort;
+const fs = std.fs;
 
 pub const Aggregator = struct {
     allocator: std.mem.Allocator,
@@ -220,31 +221,40 @@ test "simple test with file" {
 }
 
 test "test ALL files" {
+    const alloc = std.testing.allocator;
+    _ = alloc;
+    const start_path = "../../../../../test/resources/samples";
+    _ = start_path;
+    //const baseDir = try fs.cwd().realpathAlloc(alloc, start_path);
+
+    //defer alloc.free(baseDir);
     const baseDir = "/home/miguel/play/1brc/src/test/resources/samples/";
 
     const dir = try std.fs.openDirAbsolute(baseDir, .{ .iterate = true });
 
     var it = dir.iterate();
     while (try it.next()) |entry| {
+        std.debug.print("walk: {s}\n", .{entry.name});
         if (entry.kind != .file) {
             continue;
         }
         if (!std.mem.endsWith(u8, entry.name, ".txt")) {
             continue;
         }
-        var expectedOutputFilename: [100]u8 = undefined;
-        var inputFile: [100]u8 = undefined;
-        try std.fs.realpath(entry.name, inputFile[0..]);
-        _ = try std.fmt.bufPrint(
-            &expectedOutputFilename,
-            "{s}{s}.out",
-            .{ baseDir, entry.name[0..(entry.name.len - 4)] },
+        var buf: [fs.MAX_PATH_BYTES]u8 = undefined;
+        const file_path = try dir.realpath(entry.name, &buf);
+
+        var tmp: [100]u8 = undefined;
+        const expectedOutputFilename = try std.fmt.bufPrint(
+            &tmp,
+            "{s}.out",
+            .{file_path[0..(file_path.len - 4)]},
         );
 
-        testSingleFile(inputFile[0..], expectedOutputFilename[0..]) catch |err| {
+        testSingleFile(file_path[0..], expectedOutputFilename[0..]) catch |err| {
             std.debug.print(
                 "Error: on files: \ninput {s} \nexpectedOutput: {s}\n",
-                .{ inputFile[0..], expectedOutputFilename[0..] },
+                .{ file_path, expectedOutputFilename },
             );
             return err;
         };
@@ -254,7 +264,7 @@ test "test ALL files" {
 fn testSingleFile(filename: []const u8, expectedOutputFilename: []const u8) !void {
     const testing = std.testing;
     const alloc = std.testing.allocator;
-    const output_max_len = 256;
+    const output_max_len = 512;
     var bufExpected: [output_max_len]u8 = undefined;
     var buffer: [output_max_len]u8 = undefined;
     var output = std.io.fixedBufferStream(&buffer);
@@ -266,7 +276,7 @@ fn testSingleFile(filename: []const u8, expectedOutputFilename: []const u8) !voi
     try aggregator.process(filename, output.writer());
 
     // read expected output file
-    var file = try std.fs.cwd().openFile(expectedOutputFilename, .{ .mode = .read_only });
+    var file = try std.fs.openFileAbsolute(expectedOutputFilename, .{ .mode = .read_only });
     defer file.close();
     const bytes_read = try file.readAll(&bufExpected);
     const outputExpected = bufExpected[0..bytes_read];
